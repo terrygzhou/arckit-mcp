@@ -17,6 +17,7 @@ hand.
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
@@ -30,6 +31,7 @@ from arckit_mcp._registry import (
 )
 from arckit_mcp.gates import GATE_TIERS
 from arckit_mcp.handoffs import HANDOFFS
+from arckit_mcp.intake import COVERAGE, INTAKE
 
 mcp = FastMCP("arckit")
 
@@ -100,19 +102,52 @@ def _command_key(name: str) -> str:
     return f"arckit-claude/{name.replace('_', '-')}"
 
 
+def _intake_mandatory_gates(command: str, project_id: str) -> list[dict]:
+    """Soft-gate entries for structurally missing MANDATORY intake inputs.
+
+    ``INTAKE[code]["mandatory_inputs"]`` names prerequisite artefacts that
+    are *structural* for the doc-type's intake. They are checked the same
+    way hard MANDATORY gates are checked (``_gate_status``); when the
+    prerequisite artefact does not exist, an open ``{"code": ...,
+    "tier": "MANDATORY"}`` gate is emitted. Skipped *intake questions*
+    never produce a gate entry — they render as ``TBD`` in the artefact
+    and do not block (soft gate, per the spec).
+    """
+    key = _command_key(command)
+    out: list[dict] = []
+    for code in _command_doc_types(key):
+        entry = INTAKE.get(code)
+        if not entry:
+            continue
+        for input_code in entry.get("mandatory_inputs", []):
+            if _gate_status(input_code, project_id) == "open":
+                out.append({"code": input_code, "tier": "MANDATORY", "status": "open"})
+    return out
+
+
 def check_gates(command: str, project_id: str) -> dict:
     """Return gate status for *command* in project *project_id*.
 
     Shape (per spec ``arckit-mcp-gates``):
 
     * ``gates``: list of ``{code, tier, status}`` — MANDATORY and
-      RECOMMENDED gates only; OPTIONAL gates are omitted silently.
-    * ``gate_blocked``: True iff any MANDATORY gate is open.
+      RECOMMENDED gates only; OPTIONAL gates are omitted silently. A
+      MANDATORY soft-gate entry (from ``INTAKE`` mandatory inputs) that
+      collides with a same-code hard-gate entry at a lower tier
+      *escalates* the hard-gate entry in place — the entry is not
+      duplicated.
+    * ``gate_blocked``: True iff any MANDATORY gate is open, including
+      the soft structural-gate entries from ``INTAKE`` mandatory inputs.
+
+    Skipped intake questions render ``TBD`` and never contribute to
+    ``gate_blocked``; only missing structural MANDATORY prerequisite
+    inputs do.
     """
     key = _command_key(command)
     tiers = GATE_TIERS.get(key, {})
     gates = []
     blocked = False
+    seen: set[str] = set()
     for code, tier in sorted(tiers.items()):
         if tier == "OPTIONAL":
             continue  # silently skipped per spec
@@ -120,6 +155,23 @@ def check_gates(command: str, project_id: str) -> dict:
         if tier == "MANDATORY" and status == "open":
             blocked = True
         gates.append({"code": code, "tier": tier, "status": status})
+        seen.add(code)
+    for entry in _intake_mandatory_gates(command, project_id):
+        if entry["code"] in seen:
+            # A hard-gate entry for the same code already exists;
+            # escalate its tier to MANDATORY if the soft-gate says
+            # the input is MANDATORY (soft-gate tier wins on collision).
+            for g in gates:
+                if g["code"] == entry["code"]:
+                    if entry["tier"] == "MANDATORY" and g["tier"] != "MANDATORY":
+                        g["tier"] = "MANDATORY"
+                        if g["status"] == "open":
+                            blocked = True
+            continue
+        gates.append(entry)
+        seen.add(entry["code"])
+        if entry["status"] == "open":
+            blocked = True
     return {
         "command": command,
         "project_id": project_id,
@@ -313,15 +365,27 @@ def list_commands() -> list[dict]:
 def _intake_questions(command: str) -> list[dict]:
     """Return the command's intake question list.
 
-    Intake questions are declared in the command markdown's intake section;
-    they are not machine-readable yet, so we synthesize a stable placeholder
-    list keyed by the command's doc-type codes. The agent (Hermes) fills the
-    actual content from the command prompt during its session.
+    When the command's doc-type codes have generated intake data in
+    ``intake.INTAKE`` (``COVERAGE[code] == "covered"``), return the
+    template-derived question list. Otherwise fall back to the
+    synthetic per-doc-type placeholder questions (or a generic one when
+    the command has no registry doc-type codes), so no command's intake
+    payload ever becomes empty.
     """
     key = _command_key(command)
-    # Derive doc-type codes from the command's doc-types.mjs entry when
-    # available. Commands without a registry entry get a generic intake.
     code_map = _command_doc_types(key)
+    for code in sorted(code_map):
+        entry = INTAKE.get(code)
+        if entry and COVERAGE.get(code) == "covered":
+            return [
+                {
+                    "id": f"{command}-{code.lower()}-{i}",
+                    "question": q,
+                    "required": True,
+                    "hint": "From generated intake data (template question block).",
+                }
+                for i, q in enumerate(entry.get("questions", []), start=1)
+            ]
     if not code_map:
         return [
             {
@@ -414,15 +478,53 @@ def run_command(command: str, project_id: str) -> dict:
     key = _command_key(command)
     name = key.split("/", 1)[1]
     codes = _command_doc_types(key)
+    gate_report = check_gates(name, project_id)
     return {
         "id": f"ARC-{project_id}",
         "command": name,
         "doc_type": codes[0] if len(codes) == 1 else codes,
         "intake": _intake_questions(name),
         "instructions": _instructions(name, project_id),
-        "gates": check_gates(name, project_id)["gates"],
-        "gate_blocked": check_gates(name, project_id)["gate_blocked"],
+        "gates": gate_report["gates"],
+        "gate_blocked": gate_report["gate_blocked"],
     }
+
+
+def persist_intake(project_id: str, command: str) -> dict:
+    """Read saved intake answers for *command* from the project tree.
+
+    Read/seed only, per spec: Agent A (the interview owner) remains the
+    sole persister of answers — the server never writes
+    ``.arckit/intake/``. Returns the parsed JSON so a bulk build can
+    prefill the interview without prompting the user::
+
+        {
+            "project_id": "001",
+            "command": "requirements",
+            "found": True,
+            "answers": {...},
+            "path": ".arckit/intake/requirements.json",
+        }
+
+    When no saved file exists, returns ``{"found": False, "answers": None}``
+    with no error.
+    """
+    stem = command.replace("_", "-")
+    path = Path(".arckit") / "intake" / f"{stem}.json"
+    result = {
+        "project_id": project_id,
+        "command": command,
+        "found": False,
+        "answers": None,
+        "path": str(path),
+    }
+    if path.is_file():
+        result["found"] = True
+        try:
+            result["answers"] = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            result["error"] = f"Malformed intake file: {exc}"
+    return result
 
 
 def persist_artifact(
@@ -523,6 +625,19 @@ def _register_meta_tools() -> None:
     ) -> dict:
         """Persist a generated artefact into the project tree."""
         return persist_artifact(project_id, type_code, content, sequence)
+
+    @mcp.tool(
+        name="arckit.persist_intake",
+        description=(
+            "Read saved .arckit/intake/{command}.json answers for a project "
+            "so a bulk build can prefill the intake interview. Read/seed "
+            "only — the server never writes intake answers; the interview "
+            "agent remains the sole persister."
+        ),
+    )
+    def arckit_persist_intake(project_id: str, command: str) -> dict:
+        """Read saved intake answers for a command (read/seed only)."""
+        return persist_intake(project_id, command)
 
     @mcp.tool(
         name="arckit.seed_context",
