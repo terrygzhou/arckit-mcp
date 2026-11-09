@@ -37,6 +37,7 @@ covered, even if more are added.
 
 from __future__ import annotations
 
+import json
 import re
 
 import pytest
@@ -162,6 +163,147 @@ class TestIntakePayloadRendering:
         assert any("Balanced" in q for q in gaps)
         trans = INTAKE["TRANS"]["questions"]
         assert any("waves" in q for q in trans)
+
+
+class TestServerIntakeLookup:
+    """``server._intake_questions`` folds in the generated table.
+
+    Covered doc-types return the template-derived question list;
+    uncovered doc-types (``COVERAGE == "no-static-questions"``) keep
+    today's placeholder behavior, so no intake payload becomes empty.
+    """
+
+    def test_covered_doc_type_returns_derived_questions(self):
+        from arckit_mcp.server import _intake_questions
+
+        # OAPR (product-architecture) is covered with derived questions.
+        qs = _intake_questions("product-architecture")
+        assert qs, "covered doc-type must not fall back to the placeholder"
+        derived = list(INTAKE["OAPR"]["questions"])
+        assert [q["question"] for q in qs] == derived
+
+    def test_uncovered_doc_type_degrades_to_placeholder(self):
+        from arckit_mcp.server import _intake_questions
+
+        # REQ (requirements) has no static questions → placeholder.
+        assert COVERAGE["REQ"] == "no-static-questions"
+        qs = _intake_questions("requirements")
+        assert qs, "placeholder must keep the payload non-empty"
+        for q in qs:
+            assert "placeholder" in q["hint"].lower() or "Feeds" in q["hint"]
+
+    def test_intake_payload_never_empty(self):
+        from arckit_mcp.server import _command_doc_types, _intake_questions
+
+        # Every command with registry doc-type codes keeps a non-empty list.
+        for name in ("requirements", "transition-architecture",
+                     "product-architecture", "gap-analysis"):
+            assert _intake_questions(name), f"{name}: empty intake payload"
+
+
+def _seed_artefact(root: Path, code: str, project_id: str = "001") -> None:
+    """Seed ``projects/{project_id}/ARC-001-{CODE}-v1.0.md`` under *root*.
+
+    The gate check looks under ``projects/{project_id}/`` relative to the
+    cwd, so chdir-ing to *root* and creating the file here makes the
+    corresponding hard gate report ``closed``.
+    """
+    pdir = root / "projects" / project_id
+    pdir.mkdir(parents=True, exist_ok=True)
+    (pdir / f"ARC-{project_id.split('-')[0]}-{code}-v1.0.md").write_text(
+        "# stub\n"
+    )
+
+
+class TestSoftGateSemantics:
+    """``check_gates`` soft gate: only missing MANDATORY *inputs* block."""
+
+    def test_missing_mandatory_prerequisite_blocks(self, tmp_path, monkeypatch):
+        from arckit_mcp.server import check_gates
+
+        monkeypatch.chdir(tmp_path)
+        # Seed APP so the hard gate (GATE_TIERS APP=MANDATORY) is closed;
+        # the soft gate on ADMP (INTAKE["APP"]["mandatory_inputs"]) is
+        # the only open MANDATORY gate, so it must be the blocker.
+        _seed_artefact(tmp_path, "APP")
+        result = check_gates("application-rationalization", "001")
+        assert result["gate_blocked"] is True
+        admp = [g for g in result["gates"]
+                if g["code"] == "ADMP" and g["tier"] == "MANDATORY"]
+        assert admp and admp[0]["status"] == "open", (
+            f"the soft-gate entry for ADMP must be the open blocker: {admp}"
+        )
+        app = [g for g in result["gates"] if g["code"] == "APP"]
+        assert app and all(g["status"] == "closed" for g in app), (
+            "the seeded APP artefact must close the hard gate: "
+            f"{app}"
+        )
+
+    def test_skipped_intake_questions_never_block(self, tmp_path, monkeypatch):
+        from arckit_mcp.server import check_gates
+
+        monkeypatch.chdir(tmp_path)
+        # Seed PRIN to close the hard gate; the only open MANDATORY gate
+        # is the soft-gate entry for the OAPR-derived questions' TBD
+        # answers. Per the soft-gate policy TBD answers never block.
+        _seed_artefact(tmp_path, "PRIN")
+        result = check_gates("product-architecture", "001")
+        assert result["gate_blocked"] is False, (
+            f"skipped intake questions (TBD) must not trip the gate: "
+            f"{result}"
+        )
+
+    def test_mandatory_input_deduped_against_hard_gates(self, tmp_path, monkeypatch):
+        from arckit_mcp.server import check_gates
+
+        monkeypatch.chdir(tmp_path)
+        # Seed APP so the hard gate is closed; ADMP is open only via
+        # the soft-gate path, so the gates list must carry it exactly
+        # once.
+        _seed_artefact(tmp_path, "APP")
+        result = check_gates("application-rationalization", "001")
+        admp = [g for g in result["gates"] if g["code"] == "ADMP"]
+        assert len(admp) == 1, (
+            "a MANDATORY input must appear exactly once in the gates "
+            f"list (hard and soft deduped): {admp}"
+        )
+
+
+class TestPersistIntakeTool:
+    """``arckit.persist_intake`` is read/seed only — never a write path."""
+
+    def test_reads_saved_answers(self, tmp_path, monkeypatch):
+        from arckit_mcp.server import persist_intake
+
+        intake_dir = tmp_path / ".arckit" / "intake"
+        intake_dir.mkdir(parents=True)
+        answers = {"scope": "all applications"}
+        (intake_dir / "requirements.json").write_text(
+            json.dumps(answers), encoding="utf-8"
+        )
+        monkeypatch.chdir(tmp_path)
+        result = persist_intake("001", "requirements")
+        assert result["found"] is True
+        assert result["answers"] == answers
+        assert result["path"] == ".arckit/intake/requirements.json"
+
+    def test_missing_file_returns_not_found_not_error(self, tmp_path, monkeypatch):
+        from arckit_mcp.server import persist_intake
+
+        monkeypatch.chdir(tmp_path)
+        result = persist_intake("001", "discovery")
+        assert result["found"] is False
+        assert result["answers"] is None
+        assert "error" not in result
+
+    def test_no_write_path_for_answers(self, tmp_path, monkeypatch):
+        from arckit_mcp.server import persist_intake
+
+        monkeypatch.chdir(tmp_path)
+        result = persist_intake("001", "discovery")
+        # The tool must never create or modify .arckit/intake files.
+        assert not (tmp_path / ".arckit").exists()
+        assert result["path"] == ".arckit/intake/discovery.json"
 
 
 class TestParserNotes:
