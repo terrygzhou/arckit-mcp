@@ -15,22 +15,28 @@ next — running until the host stops.
 governance harness as MCP tools. Layers:
 
 - `arckit_mcp/_registry.py`, `gates.py`, `handoffs.py`, `intake.py` —
-  **generated** data tables (regenerated from arc-kit via `arckit-mcp-sync` /
-  `generate-mcp-*.py`).
+  **generated** data tables (regenerated from arc-kit via
+  `arckit-mcp-sync` / `generate-mcp-*.py`). `_registry.py` holds
+  `DOC_TYPES`, `KNOWN_TYPES`, `MULTI_INSTANCE_TYPES`, `SUBDIR_MAP`
+  (e.g. `ADR → decisions/`); `intake.py` holds `INTAKE` (17 non-empty
+  entries, each `{'questions': [...], 'mandatory_inputs': [...],
+  'source': 'plugins/…'}`) and `COVERAGE` (177 entries: 17 `covered`,
+  160 `no-static-questions`).
 - `arckit_mcp/server.py` — the MCP server. Tool groups:
   - **Meta-tools**: `arckit.list_commands`, `arckit.next_step`,
     `arckit.check_gates`, `arckit.persist_artifact`, `arckit.persist_intake`,
     `arckit.seed_context`.
-  - **Per-command tools**: ~101 `arckit.{command}` relays, one per ArcKit
-    command. Each returns `intake` (questions to answer), `instructions`
-    (where to run + where to save), `gates` + `gate_blocked`, `doc_type`.
+  - **Per-command tools**: 101 `arckit.{command}` relays, one per key in the
+    generated `GATE_TIERS` table (core + overlay plugins). Each returns
+    `intake` (questions to answer), `instructions` (where to run + where to
+    save), `gates` + `gate_blocked`, `doc_type`.
   - **Prompt-relay model**: the agent never reads the command markdown; the
     server tells it which gates are open, what to answer, where to write; the
     agent does the LLM generation in-session and persists via
     `arckit.persist_artifact`.
 
 **`arc-kit`** — the source harness. `plugins/arckit-claude/commands/*.md`
-(78 core commands + overlays) each ship front-matter `gates:` tiers
+(core commands plus overlays) each ship front-matter `gates:` tiers
 (MANDATORY / RECOMMENDED / OPTIONAL) and `handoffs:` edges that feed
 `next_step`. Entry slash command is `/arckit:init`; the intake interview
 contract is in `references/intake-instructions.md` (ask-always,
@@ -44,13 +50,16 @@ answers render as `TBD`).
 | F1 | **Defect** | `server.seed_context` vs `server._project_dir`/`persist_artifact` | `seed_context` mints `projects/001-{slug}/` on disk and returns `project_dir: "projects/001-{slug}"`, but `persist_artifact`, `check_gates`, and `_artifact_exists` resolve the bare `projects/{project_id}/` directory. The two layouts do not line up: an agent that seeds then persists to the slug dir returned by `seed_context` will **not** close any gate, because gate checks read the bare `001/` dir. Pinned by `test_seed_and_persist_use_different_layouts`. |
 | F2 | Cosmetic | `server.run_command` | The relay payload's `id` is `ARC-{project_id}` but there is no top-level `project_id` key on the relay dict (unlike `check_gates`, which carries one). Reconstructing the id from `relay["id"]` is fine, but the asymmetry is easy to trip over. |
 | F3 | Contract | `server._command_doc_types` | Doc-type codes are derived from a hand-maintained `name_map`/`overlay_map` inside `server.py`, not read from the registry. A new command or code added to arc-kit's `doc-types.mjs` will not be reflected in the relay until `server.py` is updated by hand — a silent cross-repo drift risk (generated tables stay fresh, but the mapping does not). |
-| F4 | By-design | `intake.py` `COVERAGE` | Most core doc-types are `no-static-questions`; the relay degrades to a single placeholder question per code (intentional — the server must never return an empty question list). `COVERAGE` makes the gap visible. |
+| F4 | By-design | `intake.py` `COVERAGE` | 160 of 177 doc-types are `no-static-questions` (17 are `covered`); for the uncovered codes the relay degrades to a per-code placeholder question (intentional — the server must never return an empty question list). `COVERAGE` makes the gap visible. |
+| F5 | Contract | `server.persist_intake` | Read/seed only (never writes `.arckit/intake/`, per spec), but the on-disk stem is the hyphenated command name (`discovery-architecture.json` for the `discovery_architecture` tool), while the MCP tool parameter is the underscored name. Agents copying the tool parameter verbatim into a file path will miss saved answers. Pinned by `test_no_write_path_for_answers` (read-only shape) and by the hyphenated-path tests in `test_intake.py`. |
 
 ### 1.3 What the tests now cover
 
 `tests/mcp/test_agent_loop.py` (24 tests) drives a **payment gateway
 modernization** sample project through the full relay loop and pins each
-checkpoint. Full suite: **66 passing** (42 pre-existing + 24 new).
+checkpoint. Full suite: **66 passing** (42 pre-existing + 24 new) —
+`test_agent_loop` 24, `test_gates` 4, `test_intake` 22, `test_next_step` 5,
+`test_seed_context` 8, `test_sync` 3.
 
 ## 2. Checkpoint log (external agent drives the sample project)
 
@@ -91,9 +100,9 @@ PCI-DSS L1, `< 2 s` latency. Constraints: no new vendors, GovCloud.
 
 ### CP4 — Unblock `PRIN`: run `principles`, answer host, persist
 - **Decision:** `PRIN` gate open → agent steps back to `arckit.principles`.
-- **Host asks:** the intake questions (≥1 placeholder, since PRIN has no
-  static question block).
-- **Response:** agent generates `ARC-000-PRIN-v1.0.md` and persists it with
+- **Host asks:** the intake questions (PRIN has no static question block,
+  so ≥1 placeholder).
+- **Response:** agent generates `ARC-001-PRIN-v1.0.md` and persists it with
   `arckit.persist_artifact("001","PRIN", …)`.
 - **Monitored:** `persist_artifact` returns `written: true`; after persist
   the `PRIN` gate on `strategy` flips to `closed`.
@@ -163,6 +172,6 @@ python -m pytest tests/mcp/test_agent_loop.py -v   # the new 24
 ## 4. Verification record
 
 - **Command:** `python -m pytest tests/ -q` (run from repo root)
-- **Outcome:** `66 passed in 0.22s` (42 pre-existing + 24 new).
+- **Outcome:** `66 passed in 0.21s` (42 pre-existing + 24 new).
 - No regressions; the new suite is isolated under `tmp_path` +
   `monkeypatch.chdir`, so it does not touch the real `projects/` tree.

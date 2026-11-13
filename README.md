@@ -19,6 +19,7 @@ arckit_mcp/
 tests/
     mcp/
         conftest.py
+        test_agent_loop.py   # EYW-817 checkpoint suite (CP1–CP9 + invariants)
         test_gates.py
         test_intake.py
         test_next_step.py
@@ -113,14 +114,14 @@ regenerating the vendored generated files.
 4. **Verify**:
 
    ```bash
-   python -m pytest tests/ -v      # 42 tests
+   python -m pytest tests/ -v      # 66 tests
    arckit-mcp                      # boots the stdio server; Ctrl-C to stop
    ```
 
 ## Using with ArcKit
 
 The server exposes the ArcKit governance harness as MCP tools so an agent can
-drive the harness without knowing its hundreds of commands and templates.
+drive the harness without knowing its 101 commands and templates.
 The agent never reads the command markdown itself — the server acts as a
 *prompt relay*: it tells the agent which gates are open, what to answer, and
 where to write the result, and the agent does the actual document generation
@@ -140,10 +141,11 @@ governance logic, so the agent never has to know the command graph by heart:
 | `arckit.list_commands` | Enumerate every known command with its doc-type codes and gate tiers. Useful for discovery, not required in the normal loop. |
 | `arckit.next_step` | Walk the handoffs graph and return the next recommended command given the project id and the commands completed so far. |
 | `arckit.check_gates` | Return which prerequisite gates are open/closed for a command. `MANDATORY` gates hard-stop when open; `RECOMMENDED` are noted; `OPTIONAL` are omitted. |
+| `arckit.persist_intake` | Read saved intake answers (`.arckit/intake/{command-hyphenated}.json`). Read-only; never writes. |
 | `arckit.persist_artifact` | Write a generated artifact into the project tree. Multi-instance types (ADR, DIAG, …) get the next sequence number when `sequence` is omitted. |
 
 **Per-command tools** — one `arckit.{command}` tool per ArcKit command
-(~100 of them), e.g. `arckit.strategy`, `arckit.risk`, `arckit.roadmap`,
+(101 of them), e.g. `arckit.strategy`, `arckit.risk`, `arckit.roadmap`,
 `arckit.it4it_value_network`. Each returns:
 
 - `intake` — the intake questions to answer,
@@ -182,14 +184,18 @@ ship question blocks are fully `covered`.
    to find the next one, then repeat from step 2.
 
 All project-state lookups are relative to the server's working directory
-(`projects/{NNN}-{slug}/`), so launch `arckit-mcp` from the root of your
-ArcKit working tree.
+(`projects/{project_id}/`), so launch `arckit-mcp` from the root of your
+ArcKit working tree. Note: `seed_context` mints a slug directory
+(`projects/{NNN}-{slug}/`) on disk, but `persist_artifact`, `check_gates`,
+and `_artifact_exists` resolve the bare `projects/{project_id}/` directory.
+Persist artifacts to the **bare** directory for gates to close; the slug
+directory is for human browsing only.
 
 ### Worked example: a security architecture strategy in Australia
 
 Say an agent is asked: "Design a security architecture strategy for our
 platform that must comply with the Australian government's IRAP / Protective
-Security Framework." The agent never needs to know ArcKit has 100+ commands
+Security Framework." The agent never needs to know ArcKit has 101 commands
 — it just follows the loop above.
 
 1. `arckit.seed_context` with the goal (PSF-aligned security strategy) and a
