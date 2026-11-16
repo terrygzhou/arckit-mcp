@@ -47,13 +47,86 @@ answers render as `TBD`).
 
 | # | Severity | Location | Finding |
 |---|----------|----------|---------|
-| F1 | **Defect** | `server.seed_context` vs `server._project_dir`/`persist_artifact` | `seed_context` mints `projects/001-{slug}/` on disk and returns `project_dir: "projects/001-{slug}"`, but `persist_artifact`, `check_gates`, and `_artifact_exists` resolve the bare `projects/{project_id}/` directory. The two layouts do not line up: an agent that seeds then persists to the slug dir returned by `seed_context` will **not** close any gate, because gate checks read the bare `001/` dir. Pinned by `test_seed_and_persist_use_different_layouts`. **Fixed in `fix-seed-context-layout` (change `arckit-mcp`): `seed_context` now mints the bare `projects/{pid}/` layout; a `.meta` sidecar records name/pid for collision detection; the `slug` field is returned separately.** |
-| F2 | Cosmetic | `server.run_command` | The relay payload's `id` is `ARC-{project_id}` but there is no top-level `project_id` key on the relay dict (unlike `check_gates`, which carries one). Reconstructing the id from `relay["id"]` is fine, but the asymmetry is easy to trip over. **Fixed in `fix-seed-context-layout`: `run_command` now returns `"project_id": project_id` alongside `"id"`.** |
+| F1 | **Defect** | `server.seed_context` vs `server._project_dir`/`persist_artifact` | `seed_context` mints `projects/001-{slug}/` on disk and returns `project_dir: "projects/001-{slug}"`, but `persist_artifact`, `check_gates`, and `_artifact_exists` resolve the bare `projects/{project_id}/` directory. The two layouts do not line up: an agent that seeds then persists to the slug dir returned by `seed_context` will **not** close any gate, because gate checks read the bare `001/` dir. Pinned by `test_seed_and_persist_use_different_layouts`. **Fixed in `fix-seed-context-layout`** — `seed_context` now mints the bare `projects/{pid}/` layout and the pinning test flips to `test_seed_and_persist_share_layout` (see OpenSpec change tasks 1.1–1.8). |
+| F2 | Cosmetic | `server.run_command` | The relay payload's `id` is `ARC-{project_id}` but there is no top-level `project_id` key on the relay dict (unlike `check_gates`, which carries one). Reconstructing the id from `relay["id"]` is fine, but the asymmetry is easy to trip over. **Fixed in `fix-seed-context-layout`** — a top-level `"project_id"` key was added to the `run_command` return dict, with a matching test `test_relay_includes_project_id` (see OpenSpec change tasks 2.1–2.2). |
 | F3 | Contract | `server._command_doc_types` | Doc-type codes are derived from a hand-maintained `name_map`/`overlay_map` inside `server.py`, not read from the registry. A new command or code added to arc-kit's `doc-types.mjs` will not be reflected in the relay until `server.py` is updated by hand — a silent cross-repo drift risk (generated tables stay fresh, but the mapping does not). |
 | F4 | By-design | `intake.py` `COVERAGE` | 160 of 177 doc-types are `no-static-questions` (17 are `covered`); for the uncovered codes the relay degrades to a per-code placeholder question (intentional — the server must never return an empty question list). `COVERAGE` makes the gap visible. |
 | F5 | Contract | `server.persist_intake` | Read/seed only (never writes `.arckit/intake/`, per spec), but the on-disk stem is the hyphenated command name (`discovery-architecture.json` for the `discovery_architecture` tool), while the MCP tool parameter is the underscored name. Agents copying the tool parameter verbatim into a file path will miss saved answers. Pinned by `test_no_write_path_for_answers` (read-only shape) and by the hyphenated-path tests in `test_intake.py`. |
 
-### 1.3 What the tests now cover
+### 1.3 Known limitations
+
+Recorded as known and accepted; each item is tracked in the remediation
+plan (`docs/agent-loop-checkpoints-remediation.md`) and, where a fix is
+deferred to a separate OpenSpec change, cross-referenced here.
+
+- **F1 — Layout drift between `seed_context` and `persist_artifact` /
+  `check_gates` / `next_step`.** `seed_context` mints
+  `projects/{pid}-{slug}/` on disk and returns that path as
+  `project_dir`, but the three read-side tools all resolve the **bare**
+  `projects/{pid}/` directory. An agent that seeds a project and then
+  persists artefacts into the slug dir `seed_context` reports will write
+  to a directory no gate check ever reads — no gate will close. Pinned
+  by `test_seed_and_persist_use_different_layouts`
+  (tests/mcp/test_agent_loop.py §CP4).
+  - **Interim mitigation:** follow the relay's `instructions` field
+    (which names the bare dir), not the slug dir `seed_context` reports;
+    AGENTS.md guardrail §1 documents this explicitly.
+  - **Forward-looking remediation:** OpenSpec change
+    `openspec/changes/fix-seed-context-layout/` (tasks 1.1–1.8):
+    `seed_context` will mint `projects/{pid}/` (bare layout) and the
+    pinning test will flip to
+    `test_seed_and_persist_share_layout`.
+  - **Status:** not fixed in this pass — deferred to the
+    `fix-seed-context-layout` change.
+
+- **F2 — Missing top-level `project_id` in `run_command` relay payload.**
+  The relay dict carries `id: "ARC-{project_id}"` but no `project_id`
+  key (unlike `check_gates`). Reconstructing the id from the `id` string
+  is fragile.
+  - **Forward-looking remediation:** OpenSpec change
+    `openspec/changes/fix-seed-context-layout/` (tasks 2.1–2.2): add a
+    top-level `"project_id"` key to the `run_command` return dict, with
+    a matching test `test_relay_includes_project_id`.
+  - **Status:** not fixed in this pass — deferred to the
+    `fix-seed-context-layout` change.
+
+- **F3 — Hand-maintained `name_map` / `overlay_map` in
+  `server._command_doc_types`.** The command → doc-type mapping is a
+  second, hand-written copy of what the registry already knows; a new
+  command or code added to arc-kit's `doc-types.mjs` will not be
+  reflected in the relay until `server.py` is updated by hand. Two
+  deferred remediation options:
+  - **(A)** generate a `COMMAND_DOC_TYPES` table into
+    `arckit_mcp/_registry.py` from the same source as the other
+    generated tables (preferred);
+  - **(B)** add a CI check diffing `name_map` / `overlay_map` against
+    the registry and failing on drift.
+  - **TICKET:** `openspec/changes/fix-seed-context-layout/tasks.md` task 3.2 — F3 follow-up ticket of record; the remediation owner must pick (A) or (B) and add a corresponding task under that section.
+
+- **F4 — Placeholder `intake` floor is by design.** 160 of 177
+  doc-types are `no-static-questions`; for the uncovered codes the relay
+  degrades to one placeholder question per code so the server never
+  returns an empty intake list. Pinned by
+  `test_relay_never_returns_empty_intake`
+  (tests/mcp/test_agent_loop.py §CP4).
+
+- **F5 — Hyphenated on-disk intake stem vs underscored tool parameter.**
+  `persist_intake` writes / reads `.arckit/intake/{hyphenated-stem}.json`
+  (e.g. `discovery-architecture.json`), while the MCP tool parameter is
+  underscored (`discovery_architecture`). An agent that copies the tool
+  parameter verbatim into a file path will miss saved answers.
+  - **Status:** by design; the function is read/seed-only and never
+    writes to `.arckit/intake/`. Pinned by
+    `test_no_write_path_for_answers` (tests/mcp/test_intake.py).
+  - **Stop-word note (F3b):** `_STOP_WORDS` in `server.py` (used by
+    `_derive_source_id` to build citation source-ids from file stems) is
+    a hand-maintained copy of the stop-list in arc-kit's
+    `citation-instructions.md` §Source ID Rules.  If arc-kit adds or
+    removes a word, the derived source-ids will silently diverge from
+    arc-kit's derivation until the list is synced.  Same cross-repo
+    drift risk as F3, narrower surface.
+
+### 1.4 What the tests now cover
 
 `tests/mcp/test_agent_loop.py` (24 tests) drives a **payment gateway
 modernization** sample project through the full relay loop and pins each

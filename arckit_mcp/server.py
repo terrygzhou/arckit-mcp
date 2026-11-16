@@ -213,6 +213,13 @@ def next_step(project_id: str, completed: list[str] | None = None) -> dict:
     return {"project_id": project_id, "next": target, "reason": reason}
 
 
+# KNOWN LIMITATION (F3b, docs/agent-loop-checkpoints.md §1.3, sub-item of
+# the F5 stop-word note): this stop-list is a hand-maintained copy of the
+# citation stop-word list defined in arc-kit's
+# plugins/arckit-claude/references/citation-instructions.md §Source ID
+# Rules.  If arc-kit adds or removes a word, source-id derivation here
+# will silently diverge from arc-kit's derivation until this set is
+# synced by hand.  Same cross-repo drift risk as F3, narrower surface.
 _STOP_WORDS = {
     "the", "and", "of", "for", "in", "a", "an", "to", "with",
     "on", "by", "from", "at", "as", "is", "are", "that", "this",
@@ -549,6 +556,14 @@ def persist_intake(project_id: str, command: str) -> dict:
     When no saved file exists, returns ``{"found": False, "answers": None}``
     with no error.
     """
+    # KNOWN LIMITATION (F5, docs/agent-loop-checkpoints.md §1.3): the
+    # on-disk stem is the hyphenated command name (``_`` → ``-``), while
+    # the MCP tool parameter is underscored. An agent that copies the
+    # tool parameter verbatim into a file path will miss saved answers.
+    # Pinned by ``test_no_write_path_for_answers``
+    # (tests/mcp/test_intake.py) — ``discovery`` → ``discovery.json``
+    # is the canonical example — and by the read-only shape of this
+    # function (never writes to ``.arckit/intake/``).
     stem = command.replace("_", "-")
     path = Path(".arckit") / "intake" / f"{stem}.json"
     result = {
