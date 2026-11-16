@@ -47,8 +47,8 @@ answers render as `TBD`).
 
 | # | Severity | Location | Finding |
 |---|----------|----------|---------|
-| F1 | **Defect** | `server.seed_context` vs `server._project_dir`/`persist_artifact` | `seed_context` mints `projects/001-{slug}/` on disk and returns `project_dir: "projects/001-{slug}"`, but `persist_artifact`, `check_gates`, and `_artifact_exists` resolve the bare `projects/{project_id}/` directory. The two layouts do not line up: an agent that seeds then persists to the slug dir returned by `seed_context` will **not** close any gate, because gate checks read the bare `001/` dir. Pinned by `test_seed_and_persist_use_different_layouts`. |
-| F2 | Cosmetic | `server.run_command` | The relay payload's `id` is `ARC-{project_id}` but there is no top-level `project_id` key on the relay dict (unlike `check_gates`, which carries one). Reconstructing the id from `relay["id"]` is fine, but the asymmetry is easy to trip over. |
+| F1 | **Defect** | `server.seed_context` vs `server._project_dir`/`persist_artifact` | `seed_context` mints `projects/001-{slug}/` on disk and returns `project_dir: "projects/001-{slug}"`, but `persist_artifact`, `check_gates`, and `_artifact_exists` resolve the bare `projects/{project_id}/` directory. The two layouts do not line up: an agent that seeds then persists to the slug dir returned by `seed_context` will **not** close any gate, because gate checks read the bare `001/` dir. Pinned by `test_seed_and_persist_use_different_layouts`. **Fixed in `fix-seed-context-layout`** — `seed_context` now mints the bare `projects/{pid}/` layout and the pinning test flips to `test_seed_and_persist_share_layout` (see OpenSpec change tasks 1.1–1.8). |
+| F2 | Cosmetic | `server.run_command` | The relay payload's `id` is `ARC-{project_id}` but there is no top-level `project_id` key on the relay dict (unlike `check_gates`, which carries one). Reconstructing the id from `relay["id"]` is fine, but the asymmetry is easy to trip over. **Fixed in `fix-seed-context-layout`** — a top-level `"project_id"` key was added to the `run_command` return dict, with a matching test `test_relay_includes_project_id` (see OpenSpec change tasks 2.1–2.2). |
 | F3 | Contract | `server._command_doc_types` | Doc-type codes are derived from a hand-maintained `name_map`/`overlay_map` inside `server.py`, not read from the registry. A new command or code added to arc-kit's `doc-types.mjs` will not be reflected in the relay until `server.py` is updated by hand — a silent cross-repo drift risk (generated tables stay fresh, but the mapping does not). |
 | F4 | By-design | `intake.py` `COVERAGE` | 160 of 177 doc-types are `no-static-questions` (17 are `covered`); for the uncovered codes the relay degrades to a per-code placeholder question (intentional — the server must never return an empty question list). `COVERAGE` makes the gap visible. |
 | F5 | Contract | `server.persist_intake` | Read/seed only (never writes `.arckit/intake/`, per spec), but the on-disk stem is the hyphenated command name (`discovery-architecture.json` for the `discovery_architecture` tool), while the MCP tool parameter is the underscored name. Agents copying the tool parameter verbatim into a file path will miss saved answers. Pinned by `test_no_write_path_for_answers` (read-only shape) and by the hyphenated-path tests in `test_intake.py`. |
@@ -101,8 +101,7 @@ deferred to a separate OpenSpec change, cross-referenced here.
     generated tables (preferred);
   - **(B)** add a CI check diffing `name_map` / `overlay_map` against
     the registry and failing on drift.
-  - **Ticket of record:**
-    `openspec/changes/fix-seed-context-layout/tasks.md` §3.2.
+  - **TICKET:** `openspec/changes/fix-seed-context-layout/tasks.md` task 3.2 — F3 follow-up ticket of record; the remediation owner must pick (A) or (B) and add a corresponding task under that section.
 
 - **F4 — Placeholder `intake` floor is by design.** 160 of 177
   doc-types are `no-static-questions`; for the uncovered codes the relay
@@ -119,6 +118,13 @@ deferred to a separate OpenSpec change, cross-referenced here.
   - **Status:** by design; the function is read/seed-only and never
     writes to `.arckit/intake/`. Pinned by
     `test_no_write_path_for_answers` (tests/mcp/test_intake.py).
+  - **Stop-word note (F3b):** `_STOP_WORDS` in `server.py` (used by
+    `_derive_source_id` to build citation source-ids from file stems) is
+    a hand-maintained copy of the stop-list in arc-kit's
+    `citation-instructions.md` §Source ID Rules.  If arc-kit adds or
+    removes a word, the derived source-ids will silently diverge from
+    arc-kit's derivation until the list is synced.  Same cross-repo
+    drift risk as F3, narrower surface.
 
 ### 1.4 What the tests now cover
 
