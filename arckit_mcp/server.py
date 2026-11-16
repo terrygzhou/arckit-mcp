@@ -520,6 +520,7 @@ def run_command(command: str, project_id: str) -> dict:
     gate_report = check_gates(name, project_id)
     return {
         "id": f"ARC-{project_id}",
+        "project_id": project_id,
         "command": name,
         "doc_type": codes[0] if len(codes) == 1 else codes,
         "intake": _intake_questions(name),

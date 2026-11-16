@@ -2,8 +2,9 @@
 
 Covered:
 
-* seeding a fresh project mints ``projects/001-{slug}/`` with an
-  ``external/`` subdirectory;
+* seeding a fresh project mints ``projects/001/`` (bare layout, no slug
+  in the directory name) with an ``external/`` subdirectory;
+* the returned payload carries the ``slug`` as a separate field;
 * a second seed in the same cwd mints ``002``;
 * importing a context folder copies files (preserving subdirectories)
   into ``external/``, writes ``external/CONTEXT.md`` with per-file
@@ -13,11 +14,14 @@ Covered:
   words, uppercase);
 * seeding with goals/constraints writes ``GOALS.md`` at the project root;
 * the returned project_id is usable with ``check_gates``;
-* seeding a name that already exists returns an error dict.
+* seeding a name that already exists returns an error dict (collision
+  detected via the ``.meta`` sidecar, which persists across server
+  invocations).
 """
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from arckit_mcp.server import check_gates, seed_context
@@ -37,10 +41,16 @@ def test_seed_mints_project_dir(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     result = seed_context("Payment Gateway")
     assert result["project_id"] == "001"
-    assert result["project_dir"] == "projects/001-payment-gateway"
-    pdir = tmp_path / "projects" / "001-payment-gateway"
+    # Bare layout: directory name is the numeric pid only, no slug suffix.
+    assert result["project_dir"] == "projects/001"
+    assert result["slug"] == "payment-gateway"
+    pdir = tmp_path / "projects" / "001"
     assert pdir.is_dir()
     assert (pdir / "external").is_dir()
+    # .meta sidecar records the project name + pid for collision detection.
+    meta = json.loads((pdir / ".meta").read_text(encoding="utf-8"))
+    assert meta["name"] == "Payment Gateway"
+    assert meta["pid"] == "001"
     assert result["files_imported"] == 0
     assert result["context_index"] is None
 
@@ -51,8 +61,9 @@ def test_seed_mints_second_project(tmp_path, monkeypatch):
     second = seed_context("Beta")
     assert first["project_id"] == "001"
     assert second["project_id"] == "002"
-    assert second["project_dir"] == "projects/002-beta"
-    assert (tmp_path / "projects" / "002-beta").is_dir()
+    assert second["project_dir"] == "projects/002"
+    assert second["slug"] == "beta"
+    assert (tmp_path / "projects" / "002").is_dir()
 
 
 def test_seed_imports_folder(tmp_path, monkeypatch):
@@ -62,7 +73,7 @@ def test_seed_imports_folder(tmp_path, monkeypatch):
     assert result["project_id"] == "001"
     assert result["files_imported"] == 3
     assert result["context_index"] == "external/CONTEXT.md"
-    ext = tmp_path / "projects" / "001-payment-gateway" / "external"
+    ext = tmp_path / "projects" / "001" / "external"
     assert (ext / "privacy-policy-v2.pdf").is_file()
     assert (ext / "nhs-digital-service-manual.pdf").is_file()
     assert (ext / "data" / "data-protection-impact-assessment.pdf").is_file()
@@ -89,7 +100,7 @@ def test_seed_source_id_derivation(tmp_path, monkeypatch):
     result = seed_context("Audit", context_folder=str(folder))
     assert result["files_imported"] == 3
     index = (
-        tmp_path / "projects" / "001-audit" / "external" / "CONTEXT.md"
+        tmp_path / "projects" / "001" / "external" / "CONTEXT.md"
     ).read_text(encoding="utf-8")
     lines = [ln for ln in index.splitlines() if "privacy-policy-v2.pdf" in ln]
     assert lines and "PP" in lines[0]
@@ -109,7 +120,7 @@ def test_seed_writes_goals_md(tmp_path, monkeypatch):
         constraints=["No new vendors", "Must stay on GovCloud"],
     )
     assert result["project_id"] == "001"
-    pdir = tmp_path / "projects" / "001-migration"
+    pdir = tmp_path / "projects" / "001"
     goals_md = (pdir / "GOALS.md").read_text(encoding="utf-8")
     assert "## Goals" in goals_md
     assert "## Constraints" in goals_md
@@ -135,11 +146,30 @@ def test_seed_name_collision(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     first = seed_context("Collision")
     assert first["project_id"] == "001"
+    # Collision is detected via the .meta sidecar, not the dir name.
     second = seed_context("Collision")
     assert "error" in second
     assert second["project_id"] is None
     # The first project directory is untouched.
-    assert (tmp_path / "projects" / "001-collision").is_dir()
+    assert (tmp_path / "projects" / "001").is_dir()
+
+
+def test_seed_collision_survives_across_invocations(tmp_path, monkeypatch):
+    """The .meta sidecar persists to disk, so a *fresh* process that
+    chdirs back into the same cwd still sees the collision."""
+    monkeypatch.chdir(tmp_path)
+    first = seed_context("Collision")
+    assert first["project_id"] == "001"
+    # Simulate a new process: re-import the module-level state by
+    # calling seed_context again (no in-memory state is kept between
+    # calls; the check is purely on-disk).
+    second = seed_context("Collision")
+    assert "error" in second
+    assert second["project_id"] is None
+    # But a *different* name still mints a new project.
+    third = seed_context("Different")
+    assert third["project_id"] == "002"
+    assert (tmp_path / "projects" / "002").is_dir()
 
 
 def test_seed_no_context_folder_no_context_index(tmp_path, monkeypatch):
@@ -148,5 +178,5 @@ def test_seed_no_context_folder_no_context_index(tmp_path, monkeypatch):
     assert result["files_imported"] == 0
     assert result["context_index"] is None
     assert not (
-        tmp_path / "projects" / "001-no-folder" / "external" / "CONTEXT.md"
+        tmp_path / "projects" / "001" / "external" / "CONTEXT.md"
     ).exists()

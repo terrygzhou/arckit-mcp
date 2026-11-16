@@ -57,3 +57,6 @@
   `python3`) and therefore leave `docs/agent-loop-checkpoints.md` §3
   `python -m pytest` as-is (remediation plan decision). Verify: no
   `python3` invocations in repo tooling.
+  TICKET: `openspec/changes/fix-seed-context-layout/tasks.md` task 3.3
+  is the ticket-of-record for the `python` vs `python3` tooling
+  constraint. See `docs/agent-loop-checkpoints.md` §1.3 for context.
