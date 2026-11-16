@@ -255,22 +255,26 @@ def seed_context(
 ) -> dict:
     """Seed a new project tree with pre-project context.
 
-    Mints a new ``projects/NNN-{slug}/`` directory, writes a ``GOALS.md``
-    with the given goals/constraints, optionally imports a folder of
-    reference documents into ``external/`` (counting all files for
-    ``files_imported``), and writes ``external/CONTEXT.md`` as a source
-    index when files were imported.
+    Mints a new ``projects/NNN/`` directory (bare layout — no slug in the
+    directory name), writes a ``GOALS.md`` with the given
+    goals/constraints, optionally imports a folder of reference documents
+    into ``external/`` (counting all files for ``files_imported``), writes
+    ``external/CONTEXT.md`` as a source index when files were imported, and
+    records the original project name in a sidecar ``.meta`` JSON file so
+    that re-seeding the same name is rejected.
 
     Returns::
 
         {
             "project_id": "NNN",
-            "project_dir": "projects/NNN-{slug}",
+            "project_dir": "projects/NNN",
+            "slug": "nnn-slug",
             "files_imported": N,
             "context_index": "external/CONTEXT.md" or None,
         }
 
-    Collision (``projects/NNN-{slug}`` already exists) returns::
+    Collision (a project with the same name is already seeded, tracked via
+    the ``.meta`` sidecar) returns::
 
         {"error": str, "project_id": None}
     """
@@ -279,9 +283,21 @@ def seed_context(
     projects_root = root / "projects"
     projects_root.mkdir(parents=True, exist_ok=True)
 
-    # Collision: a directory for this slug already exists under any id.
-    if slug and any(p.name.endswith(f"-{slug}") for p in projects_root.iterdir()):
-        return {"error": f"Project '{project_name}' already seeded", "project_id": None}
+    # Collision: a project with this name was already seeded.  The name→id
+    # mapping is persisted in the .meta sidecar inside each project dir, so
+    # the check survives across server invocations.
+    for p in projects_root.iterdir():
+        if not p.is_dir():
+            continue
+        meta = p / ".meta"
+        if not meta.is_file():
+            continue
+        try:
+            existing = json.loads(meta.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(existing, dict) and existing.get("name") == project_name:
+            return {"error": f"Project '{project_name}' already seeded", "project_id": None}
 
     # Mint the next free 3-digit id.
     taken: set[str] = set()
@@ -292,8 +308,14 @@ def seed_context(
                 taken.add(m.group(1))
     pid = f"{next(i for i in range(1, 1000) if f'{i:03d}' not in taken):03d}"
 
-    target = projects_root / f"{pid}-{slug}"
+    target = projects_root / pid
     (target / "external").mkdir(parents=True)
+
+    # .meta sidecar: name-keyed record so collision detection survives
+    # without slug-suffixed directory names.
+    (target / ".meta").write_text(
+        json.dumps({"name": project_name, "pid": pid}, indent=2) + "\n"
+    )
 
     # GOALS.md
     sections: list[str] = []
@@ -332,7 +354,8 @@ def seed_context(
 
     return {
         "project_id": pid,
-        "project_dir": f"projects/{pid}-{slug}",
+        "project_dir": f"projects/{pid}",
+        "slug": slug,
         "files_imported": files_imported,
         "context_index": context_index,
     }
@@ -395,6 +418,11 @@ def _intake_questions(command: str) -> list[dict]:
                 "hint": "Answer the command's intake questions per its prompt.",
             }
         ]
+    # KNOWN LIMITATION (F4, docs/agent-loop-checkpoints.md §1.3): the
+    # placeholder floor is intentional by-design — 160 of 177 doc-types are
+    # "no-static-questions", so they degrade to one per-code placeholder
+    # question here. The server must never return an empty intake list;
+    # the invariant test_relay_never_returns_empty_intake pins this.
     questions = []
     for i, code in enumerate(sorted(code_map), start=1):
         meta = DOC_TYPES.get(code, {})
@@ -409,6 +437,17 @@ def _intake_questions(command: str) -> list[dict]:
     return questions
 
 
+# KNOWN LIMITATION (F3, docs/agent-loop-checkpoints.md §1.3):
+# ``name_map`` / ``overlay_map`` below are hand-maintained. They duplicate
+# the registry's ``DOC_TYPES`` membership as a command→codes table, and the
+# two can drift apart when the registry grows commands without the maps
+# being updated (silent gap: new commands return [] → generic placeholder
+# intake, no doc-type codes). Two deferred remediation options:
+#   (A) generate a COMMAND_DOC_TYPES table into arckit_mcp/_registry.py
+#       from the same source as the other generated tables (preferred);
+#   (B) add a CI check diffing these maps against the registry and
+#       failing on drift.
+# Ticket-of-record: openspec/changes/fix-seed-context-layout/tasks.md §3.2.
 def _command_doc_types(key: str) -> list[str]:
     """Doc-type codes a command writes, from the registry.
 
@@ -481,6 +520,7 @@ def run_command(command: str, project_id: str) -> dict:
     gate_report = check_gates(name, project_id)
     return {
         "id": f"ARC-{project_id}",
+        "project_id": project_id,
         "command": name,
         "doc_type": codes[0] if len(codes) == 1 else codes,
         "intake": _intake_questions(name),

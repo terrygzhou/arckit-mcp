@@ -90,13 +90,9 @@ class TestCheckpoint1_Host_Asked_For_Context_Folder:
         assert result["files_imported"] == 0
         assert result["context_index"] is None
         # The agent still got a usable project_id it can drive with.
-        # NOTE: seed_context mints projects/001-{slug}/ on disk, while
-        # persist_artifact/check_gates write/read the bare projects/{id}/
-        # directory.  The two layouts do not line up — this is a real
-        # consistency defect in the server (see the note in
-        # TestAgentLoop_Invariants).  The agent must persist to the bare
-        # directory for gates to close.
-        pdir = tmp_path / "projects" / "001-payment-gateway"
+        # seed_context mints the bare projects/001/ layout, so
+        # persist_artifact/check_gates read and write the same directory.
+        pdir = tmp_path / "projects" / "001"
         assert (pdir / "external").is_dir()
 
     def test_seed_with_missing_named_context_folder_is_error(self, tmp_path, monkeypatch):
@@ -131,7 +127,9 @@ class TestCheckpoint2_Seed_Project:
             constraints=["No new vendors", "Must stay on GovCloud"],
         )
         assert result["project_id"] == "001"
-        assert result["project_dir"] == "projects/001-payment-gateway-modernization"
+        # Bare layout: no slug suffix on the directory name.
+        assert result["project_dir"] == "projects/001"
+        assert result["slug"] == "payment-gateway-modernization"
         assert result["files_imported"] == 0
         assert result["context_index"] is None
 
@@ -145,7 +143,7 @@ class TestCheckpoint2_Seed_Project:
         goals_md = (
             tmp_path
             / "projects"
-            / "001-payment-gateway"
+            / "001"
             / "GOALS.md"
         ).read_text(encoding="utf-8")
         assert "## Goals" in goals_md
@@ -191,6 +189,17 @@ class TestCheckpoint3_Strategy_Blocked_On_Mandatory_Gates:
         assert relay["command"] == "strategy"
         # run_command carries the project id in the "id" field.
         assert relay["id"] == "ARC-001"
+        # F2 relay symmetry: the relay also echoes back the bare project_id
+        # so the client can reuse it without re-derivation.
+        assert relay["project_id"] == "001"
+
+    def test_relay_includes_project_id(self, tmp_path, monkeypatch):
+        """F2: run_command's relay payload includes the project_id it was called with."""
+        monkeypatch.chdir(tmp_path)
+        seed_context("Payment Gateway")
+        relay = run_command("strategy", "001")
+        assert "project_id" in relay
+        assert relay["project_id"] == "001"
 
     def test_check_gates_only_lists_mandatory_and_recommended(
         self, tmp_path, monkeypatch
@@ -492,25 +501,48 @@ class TestAgentLoop_Invariants:
         assert result["written"] is False
         assert "Unknown doc-type" in result["error"]
 
-    def test_seed_and_persist_use_different_layouts(
+    def test_seed_and_persist_share_layout(
         self, tmp_path, monkeypatch
     ):
-        """Documents a real consistency defect: seed_context mints
-        projects/001-{slug}/ on disk, but persist_artifact and
-        check_gates use the bare projects/{id}/ directory.  Until the
-        server reconciles the two, an agent that seeds and then persists
-        must write to the bare directory for gates to close."""
+        """seed_context mints the bare projects/{pid}/ layout;
+        persist_artifact writes into that same directory.  The two
+        layouts are now unified — an agent that seeds and then persists
+        has a single directory to work with, so gates close correctly."""
         monkeypatch.chdir(tmp_path)
         seed_context("Payment Gateway")
-        # seed created the slug dir
-        assert (tmp_path / "projects" / "001-payment-gateway").is_dir()
-        # persist writes to the bare dir (creating it fresh)
+        pdir = tmp_path / "projects" / "001"
+        assert pdir.is_dir()
+        assert (pdir / "external").is_dir()
+        # No slug-suffixed directory is created.
+        assert not (tmp_path / "projects" / "001-payment-gateway").exists()
+        # persist writes to the bare dir (the one seed created).
         persist_artifact("001", "PRIN", "# Principles\n")
-        bare = tmp_path / "projects" / "001" / "ARC-001-PRIN-v1.0.md"
-        assert bare.is_file()
-        # The slug dir does NOT receive the artefact.
-        slug = tmp_path / "projects" / "001-payment-gateway" / "ARC-001-PRIN-v1.0.md"
-        assert not slug.is_file()
+        assert (pdir / "ARC-001-PRIN-v1.0.md").is_file()
+
+    def test_seed_persist_closes_gate(self, tmp_path, monkeypatch):
+        """End-to-end: seed a project, persist the PRIN artefact, and
+        verify that check_gates reports the PRIN gate as closed.  This
+        is the critical property that F1 (unified layout) must hold —
+        the agent seeds, persists, and the gate closes on the *same*
+        directory."""
+        monkeypatch.chdir(tmp_path)
+        seed_context("Payment Gateway")
+        # Before persisting, the PRIN gate is open.
+        pre = check_gates("requirements", "001")
+        assert any(
+            g["code"] == "PRIN" and g["status"] == "open" for g in pre["gates"]
+        )
+        # Persist the PRIN artefact.
+        persist_artifact("001", "PRIN", "# Principles\n")
+        # After persisting, the PRIN gate is closed.
+        post = check_gates("requirements", "001")
+        assert all(
+            g["status"] != "open" for g in post["gates"] if g["code"] == "PRIN"
+        )
+        # The gate for a code we did NOT persist is still open.
+        assert any(
+            g["code"] == "STKE" and g["status"] == "open" for g in post["gates"]
+        )
 
     def test_persist_multi_instance_sequence(self, tmp_path, monkeypatch):
         """Multi-instance types (ADR) get a sequence number.  A
