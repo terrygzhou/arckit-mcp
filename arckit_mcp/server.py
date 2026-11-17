@@ -454,7 +454,7 @@ def _intake_questions(command: str) -> list[dict]:
 #       from the same source as the other generated tables (preferred);
 #   (B) add a CI check diffing these maps against the registry and
 #       failing on drift.
-# Ticket-of-record: openspec/changes/fix-seed-context-layout/tasks.md §3.2.
+# Ticket-of-record: openspec/changes/document-drift-limitations/tasks.md 3.2.
 def _command_doc_types(key: str) -> list[str]:
     """Doc-type codes a command writes, from the registry.
 

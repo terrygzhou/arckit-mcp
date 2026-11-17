@@ -60,35 +60,32 @@ plan (`docs/agent-loop-checkpoints-remediation.md`) and, where a fix is
 deferred to a separate OpenSpec change, cross-referenced here.
 
 - **F1 — Layout drift between `seed_context` and `persist_artifact` /
-  `check_gates` / `next_step`.** `seed_context` mints
-  `projects/{pid}-{slug}/` on disk and returns that path as
+  `check_gates` / `next_step`.** (Historical finding — fixed.)
+  `seed_context` minted
+  `projects/{pid}-{slug}/` on disk and returned that path as
   `project_dir`, but the three read-side tools all resolve the **bare**
   `projects/{pid}/` directory. An agent that seeds a project and then
-  persists artefacts into the slug dir `seed_context` reports will write
-  to a directory no gate check ever reads — no gate will close. Pinned
+  persists artefacts into the slug dir `seed_context` reports would write
+  to a directory no gate check ever reads — no gate would close. Was
+  pinned
   by `test_seed_and_persist_use_different_layouts`
   (tests/mcp/test_agent_loop.py §CP4).
-  - **Interim mitigation:** follow the relay's `instructions` field
-    (which names the bare dir), not the slug dir `seed_context` reports;
-    AGENTS.md guardrail §1 documents this explicitly.
-  - **Forward-looking remediation:** OpenSpec change
-    `openspec/changes/fix-seed-context-layout/` (tasks 1.1–1.8):
-    `seed_context` will mint `projects/{pid}/` (bare layout) and the
-    pinning test will flip to
-    `test_seed_and_persist_share_layout`.
-  - **Status:** not fixed in this pass — deferred to the
-    `fix-seed-context-layout` change.
+  - **Fixed:** `seed_context` now mints the bare `projects/{pid}/`
+    layout with a `.meta` sidecar, and the pinning test is
+    `test_seed_and_persist_share_layout` (OpenSpec change
+    `openspec/changes/fix-seed-context-layout/` tasks 1.1–1.8, all
+    complete).
 
 - **F2 — Missing top-level `project_id` in `run_command` relay payload.**
-  The relay dict carries `id: "ARC-{project_id}"` but no `project_id`
+  (Historical finding — fixed.) The relay dict carried
+  `id: "ARC-{project_id}"` but no `project_id`
   key (unlike `check_gates`). Reconstructing the id from the `id` string
-  is fragile.
-  - **Forward-looking remediation:** OpenSpec change
-    `openspec/changes/fix-seed-context-layout/` (tasks 2.1–2.2): add a
-    top-level `"project_id"` key to the `run_command` return dict, with
-    a matching test `test_relay_includes_project_id`.
-  - **Status:** not fixed in this pass — deferred to the
-    `fix-seed-context-layout` change.
+  was fragile.
+  - **Fixed:** a top-level `"project_id"` key was added to the
+    `run_command` return dict, pinned by
+    `test_relay_includes_project_id` (OpenSpec change
+    `openspec/changes/fix-seed-context-layout/` tasks 2.1–2.2, all
+    complete).
 
 - **F3 — Hand-maintained `name_map` / `overlay_map` in
   `server._command_doc_types`.** The command → doc-type mapping is a
@@ -101,7 +98,7 @@ deferred to a separate OpenSpec change, cross-referenced here.
     generated tables (preferred);
   - **(B)** add a CI check diffing `name_map` / `overlay_map` against
     the registry and failing on drift.
-  - **TICKET:** `openspec/changes/fix-seed-context-layout/tasks.md` task 3.2 — F3 follow-up ticket of record; the remediation owner must pick (A) or (B) and add a corresponding task under that section.
+  - **TICKET:** `openspec/changes/document-drift-limitations/tasks.md` task 3.2 — F3 follow-up ticket of record; the remediation owner must pick (A) or (B) and add a corresponding task under that section.
 
 - **F4 — Placeholder `intake` floor is by design.** 160 of 177
   doc-types are `no-static-questions`; for the uncovered codes the relay

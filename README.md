@@ -137,7 +137,7 @@ governance logic, so the agent never has to know the command graph by heart:
 
 | Tool | What it does |
 | --- | --- |
-| `arckit.seed_context` | Start a project tree (`projects/{NNN}-{slug}/`) with goals, constraints, and/or an imported context folder. Returns the `project_id` to use everywhere else. Ask the user for a context folder first if they haven't given one. |
+| `arckit.seed_context` | Start a project tree (`projects/{NNN}/`, recorded with a slug in the `.meta` sidecar) with goals, constraints, and/or an imported context folder. Returns the `project_id` to use everywhere else. Ask the user for a context folder first if they haven't given one. |
 | `arckit.list_commands` | Enumerate every known command with its doc-type codes and gate tiers. Useful for discovery, not required in the normal loop. |
 | `arckit.next_step` | Walk the handoffs graph and return the next recommended command given the project id and the commands completed so far. |
 | `arckit.check_gates` | Return which prerequisite gates are open/closed for a command. `MANDATORY` gates hard-stop when open; `RECOMMENDED` are noted; `OPTIONAL` are omitted. |
@@ -185,11 +185,11 @@ ship question blocks are fully `covered`.
 
 All project-state lookups are relative to the server's working directory
 (`projects/{project_id}/`), so launch `arckit-mcp` from the root of your
-ArcKit working tree. Note: `seed_context` mints a slug directory
-(`projects/{NNN}-{slug}/`) on disk, but `persist_artifact`, `check_gates`,
-and `_artifact_exists` resolve the bare `projects/{project_id}/` directory.
-Persist artifacts to the **bare** directory for gates to close; the slug
-directory is for human browsing only.
+ArcKit working tree. `seed_context` mints the bare `projects/{NNN}/`
+directory on disk (a slug is recorded in the `.meta` sidecar, and the
+original project name is deduplicated against `.meta` files), and
+`persist_artifact`, `check_gates`, and `_artifact_exists` all resolve the
+same bare `projects/{project_id}/` directory.
 
 ### Worked example: a security architecture strategy in Australia
 
