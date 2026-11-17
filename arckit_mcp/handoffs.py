@@ -65,6 +65,9 @@ HANDOFFS: dict = {
         ("diagram", "", ""),
         ("traceability", "", ""),
     ],
+    "arckit-claude/dos": [
+        ("roadmap", "MVP selected", ""),
+    ],
     "arckit-claude/framework": [
         ("glossary", "", ""),
         ("maturity-model", "", ""),
