@@ -32,7 +32,16 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["arckit_mcp"]
+packages = [
+    "arckit_mcp",
+    "arckit_mcp.frameworks",
+]
 
 [tool.setuptools.package-data]
-arckit_mcp = ["*.py"]
+arckit_mcp = [
+    "*.py",
+    "frameworks/*.py",
+    "frameworks/SCHEMAS.json",
+    "skill/SKILL.md",
+    "skill/references/*.md",
+]
