@@ -8,7 +8,7 @@ dependencies = [
 ]
 authors = [{ name = "terrygzhou" }]
 readme = "README.md"
-license = { text = "MIT" }
+license = "MIT"
 keywords = [
     "architecture",
     "enterprise",
@@ -35,6 +35,8 @@ build-backend = "setuptools.build_meta"
 packages = [
     "arckit_mcp",
     "arckit_mcp.frameworks",
+    "arckit_mcp.skill",
+    "arckit_mcp.skill.references",
 ]
 
 [tool.setuptools.package-data]
