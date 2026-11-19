@@ -103,11 +103,11 @@ TOOLS: dict = {
                                             "'controls'.",
                              'type': 'object'}},
  'required': ['evidence'],
- 'type': 'object'}, "compliance-evidence.json"),
+ 'type': 'object'}, "compliance-evidence.json", ["REQ", "NFR", "RISK", "SOBC", "TRAC"]),
     "oaa_check_strategy_canvas": (oaa_check_strategy_canvas, "Check an OAA Agile Strategy Canvas document for required-structure completeness: design principles (each with principle/axiom/rationale), transformation waves, and resilience mapping entries. Returns a list of structural gaps, not a verdict \u2014 the canvas is a thinking artifact, so completeness matters more than strict schema conformance.", {'properties': {'canvas': {'additionalProperties': True,
                            'description': 'The parsed strategy-canvas '
                                           'document.',
                            'type': 'object'}},
  'required': ['canvas'],
- 'type': 'object'}, "strategy-canvas.json"),
+ 'type': 'object'}, "strategy-canvas.json", ["REQ", "NFR", "RISK", "SOBC", "TRAC"]),
 }

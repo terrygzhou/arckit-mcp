@@ -748,6 +748,77 @@ _register_meta_tools()
 _register_command_tools()
 
 
+# ---------------------------------------------------------------------------
+# Framework evidence-tool registration (schema-driven)
+# ---------------------------------------------------------------------------
+
+def _register_framework_tools() -> None:
+    """Register schema-driven framework evidence tools.
+
+    For each entry in ``FRAMEWORK_TOOLS``, generate a Python function
+    whose per-parameter types carry the JSON-Schema fragment via
+    ``Annotated[type, WithJsonSchema({schema})]``, then register it
+    on ``mcp`` so FastMCP validates arguments against the schema
+    before dispatching to ``frameworks.call_tool``.
+    """
+    from arckit_mcp.frameworks import FRAMEWORK_TOOLS, call_tool
+    from mcp.server.fastmcp.utilities.func_metadata import WithJsonSchema
+    from typing import Annotated as _Ann
+    import json as _json
+
+    _JTYPE = {
+        "string": str,
+        "number": float,
+        "integer": int,
+        "boolean": bool,
+        "object": dict,
+        "array": list,
+    }
+
+    for fw_name, tool_defs in FRAMEWORK_TOOLS.items():
+        for spec in tool_defs:
+            tname = spec["name"]
+            tdesc = spec["description"]
+            schema = spec["arguments"]
+
+            # Build function source from the JSON schema.
+            param_src: list[str] = []
+            for pname, pschema in schema.get("properties", {}).items():
+                ptype = _JTYPE.get(pschema.get("type", "object"), dict)
+                is_required = pname in schema.get("required", [])
+                default = pschema.get("default")
+                # Use repr() so embedded Python literals survive
+                # inspect.signature(eval_str=True).
+                ann = f"_Ann[{ptype.__name__}, WithJsonSchema({repr(pschema)})]"
+                if is_required:
+                    param_src.append(f"{pname}: {ann}")
+                elif default is not None:
+                    param_src.append(f"{pname}: {ann} = {repr(default)}")
+                else:
+                    param_src.append(f"{pname}: {ann} = None")
+
+            body_lines = [
+                f"kwargs = {{{', '.join(f'{k!r}: {k}' for k in schema.get('properties', {}))}}}",
+                f"return call_tool({repr(fw_name)}, {repr(tname)}, kwargs)",
+            ]
+            fn_src = (
+                f"def {tname}({', '.join(param_src)}) -> dict:\n"
+                + "\n".join("    " + line for line in body_lines)
+            )
+
+            ns = {"_Ann": _Ann, "WithJsonSchema": WithJsonSchema,
+                  "call_tool": call_tool, "_json": _json}
+            exec(compile(fn_src, f"<framework:{tname}>", "exec"), ns)
+            fn = ns[tname]
+
+            # Use add_tool directly so FastMCP introspects the typed
+            # function and validates arguments against the schema.
+            mcp.add_tool(fn, name=f"arckit.{tname}", description=tdesc)
+
+
+_register_framework_tools()
+
+
 def main() -> None:
     """Run the MCP server over stdio."""
     mcp.run(transport="stdio")

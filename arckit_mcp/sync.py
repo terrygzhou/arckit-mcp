@@ -5,7 +5,10 @@ and the command markdown under ``plugins/*/commands/``.  When ArcKit is
 installed as a package (``pip install arckit``), those files ship inside the
 package data.  This module locates the installed package's source tree and
 regenerates ``_registry.py``, ``gates.py``, and ``handoffs.py`` into the
-vendor directory so the standalone repo always has fresh generated data.
+vendor directory, plus the ``frameworks/`` package (via
+``generate-mcp-evidence.py`` — optional, skipped with a warning when the
+script is absent in older arc-kit checkouts), so the standalone repo always
+has fresh generated data.
 
 Usage (console script ``arckit-mcp-sync``)::
 
@@ -49,12 +52,16 @@ def _find_source_root() -> Path:
 
 
 def sync_generated(sources_root: Path) -> None:
-    """Regenerate all three generated files into the local arckit_mcp dir.
+    """Regenerate the generated files into the local arckit_mcp dir.
 
     The generators in ``sources_root/scripts/`` are executed via
     ``python3``.  Each one writes to the path given as its first CLI arg
     (the CLI-arg override that was wired into the generators), so we pass
-    the local vendor path explicitly.
+    the local vendor path explicitly.  The first three generators write
+    single files (``_registry.py``, ``gates.py``, ``handoffs.py``); the
+    fourth (``generate-mcp-evidence.py``) writes the whole ``frameworks/``
+    directory and is optional — when absent in an older arc-kit checkout
+    it is skipped with a warning instead of raising.
     """
     local_pkg = Path(__file__).resolve().parent
     generator_dir = sources_root / "scripts"
@@ -78,6 +85,30 @@ def sync_generated(sources_root: Path) -> None:
             print(result.stderr, file=sys.stderr)
             raise SystemExit(f"Generator {script_name} failed (rc={result.returncode})")
         print(f"sync: {out_path.name} OK")
+
+    # Fourth generator: evidence → frameworks/ package.  Takes an output
+    # *directory* as its CLI arg.  It is newer than the three above, so an
+    # older arc-kit checkout may lack it — warn and continue rather than fail.
+    evidence_script = generator_dir / "generate-mcp-evidence.py"
+    if not evidence_script.is_file():
+        print(
+            "sync: generate-mcp-evidence.py not found in "
+            f"{generator_dir}; skipping frameworks/ regeneration "
+            "(older arc-kit checkouts lack the evidence generator)"
+        )
+        return
+    local_frameworks = local_pkg / "frameworks"
+    print(f"sync: regenerating {local_frameworks.as_posix()} ...")
+    result = subprocess.run(
+        [sys.executable, str(evidence_script), str(local_frameworks)],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        print(result.stdout, file=sys.stderr)
+        print(result.stderr, file=sys.stderr)
+        raise SystemExit(f"Generator generate-mcp-evidence.py failed (rc={result.returncode})")
+    print(f"sync: {local_frameworks.as_posix()} OK")
 
 
 def main(argv: list[str] | None = None) -> None:

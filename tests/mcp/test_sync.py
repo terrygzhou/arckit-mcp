@@ -94,3 +94,70 @@ class TestSyncGenerated:
         with pytest.raises(FileNotFoundError):
             import arckit_mcp.sync as sync_mod
             sync_mod.sync_generated(src)
+
+    def test_calls_evidence_generator(self, tmp_path: Path):
+        """The evidence generator is invoked with the local frameworks dir."""
+        src = tmp_path / "arc-kit"
+        scripts = src / "scripts"
+        scripts.mkdir(parents=True)
+        for name in (
+            "generate-mcp-registry.py",
+            "generate-mcp-gates.py",
+            "generate-mcp-handoffs.py",
+            "generate-mcp-evidence.py",
+        ):
+            (scripts / name).write_text("# fake generator\n")
+
+        calls: list[tuple[Path, Path]] = []
+
+        def fake_run(cmd, **kwargs):
+            # cmd[0]=python, cmd[1]=script, cmd[2]=out_path
+            calls.append((Path(cmd[1]), Path(cmd[2])))
+
+            class R:
+                returncode = 0
+                stdout = ""
+                stderr = ""
+
+            return R()
+
+        with patch("arckit_mcp.sync.subprocess.run", side_effect=fake_run):
+            import arckit_mcp.sync as sync_mod
+            sync_mod.sync_generated(src)
+
+        assert len(calls) == 4
+        out_dir = Path(sync_mod.__file__).resolve().parent
+        evidence_call = [c for c in calls if c[0].name == "generate-mcp-evidence.py"]
+        assert len(evidence_call) == 1
+        assert evidence_call[0][1] == out_dir / "frameworks"
+
+    def test_missing_evidence_generator_warns(self, tmp_path: Path, capsys):
+        """A missing evidence generator warns but does not raise."""
+        src = tmp_path / "arc-kit"
+        scripts = src / "scripts"
+        scripts.mkdir(parents=True)
+        for name in ("generate-mcp-registry.py", "generate-mcp-gates.py", "generate-mcp-handoffs.py"):
+            (scripts / name).write_text("# fake generator\n")
+        # generate-mcp-evidence.py intentionally absent
+
+        calls: list[tuple[Path, Path]] = []
+
+        def fake_run(cmd, **kwargs):
+            calls.append((Path(cmd[1]), Path(cmd[2])))
+
+            class R:
+                returncode = 0
+                stdout = ""
+                stderr = ""
+
+            return R()
+
+        with patch("arckit_mcp.sync.subprocess.run", side_effect=fake_run):
+            import arckit_mcp.sync as sync_mod
+            sync_mod.sync_generated(src)
+
+        # Only the three mandatory generators run; the evidence one is skipped.
+        assert len(calls) == 3
+        assert all(c[0].name != "generate-mcp-evidence.py" for c in calls)
+        captured = capsys.readouterr()
+        assert "generate-mcp-evidence.py not found" in captured.out

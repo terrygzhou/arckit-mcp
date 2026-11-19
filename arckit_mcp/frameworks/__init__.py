@@ -116,6 +116,135 @@ SCHEMAS: dict = {'compliance-evidence.json': {'$id': 'https://arckit.org/schemas
                                        'Evidence '
                                        '(compliance-evidence-sprint-N.yaml)',
                               'type': 'object'},
+ 'functional-component.json': {'$id': 'arckit-it4it/schemas/functional-component.json',
+                               '$schema': 'http://json-schema.org/draft-07/schema#',
+                               'description': 'A capability unit in the '
+                                              'IT4IT architecture that '
+                                              'controls specific key data '
+                                              'objects (S261, Ch. 6-10). '
+                                              'Shared across the four '
+                                              'functional-group commands. '
+                                              'Reference-only — S261 is a '
+                                              'snapshot, not an approved '
+                                              'standard.',
+                               'properties': {'cardinalities': {'description': 'KDO '
+                                                                               'relationship '
+                                                                               'cardinalities '
+                                                                               'per '
+                                                                               'the '
+                                                                               'S261 '
+                                                                               'catalog',
+                                                                'items': {'properties': {'cardinality': {'enum': ['1:1',
+                                                                                                                  '1:m',
+                                                                                                                  'n:m'],
+                                                                                                         'type': 'string'},
+                                                                                         'gap': {'description': 'Record '
+                                                                                                                'deviations '
+                                                                                                                'as '
+                                                                                                                'gaps, '
+                                                                                                                'not '
+                                                                                                                'choices',
+                                                                                                 'type': 'string'},
+                                                                                         'left': {'type': 'string'},
+                                                                                         'right': {'type': 'string'}},
+                                                                          'required': ['left',
+                                                                                       'right',
+                                                                                       'cardinality'],
+                                                                          'type': 'object'},
+                                                                'type': 'array'},
+                                              'components': {'description': 'Functional '
+                                                                            'components '
+                                                                            'in '
+                                                                            'scope',
+                                                             'items': {'properties': {'key_attributes': {'items': {'type': 'string'},
+                                                                                                         'type': 'array'},
+                                                                                      'name': {'type': 'string'},
+                                                                                      'primary_kdos': {'items': {'type': 'string'},
+                                                                                                       'type': 'array'},
+                                                                                      'purpose': {'type': 'string'}},
+                                                                       'required': ['name'],
+                                                                       'type': 'object'},
+                                                             'minItems': 1,
+                                                             'type': 'array'},
+                                              'conformance_notes': {'description': 'Must '
+                                                                                   'state '
+                                                                                   'S261 '
+                                                                                   'is '
+                                                                                   'referenced '
+                                                                                   'as '
+                                                                                   'a '
+                                                                                   'reference '
+                                                                                   'architecture; '
+                                                                                   'no '
+                                                                                   'conformance '
+                                                                                   'claim',
+                                                                    'type': 'string'},
+                                              'function': {'description': 'S261 '
+                                                                          'function '
+                                                                          'group '
+                                                                          'this '
+                                                                          'component '
+                                                                          'belongs '
+                                                                          'to',
+                                                           'enum': ['Strategy',
+                                                                    'Portfolio',
+                                                                    'Develop',
+                                                                    'Test',
+                                                                    'Consume',
+                                                                    'Fulfill',
+                                                                    'Support',
+                                                                    'Assure'],
+                                                           'type': 'string'},
+                                              'id': {'description': 'Document '
+                                                                    'ID, '
+                                                                    'e.g. '
+                                                                    'ARC-002-ITSF-v1.0',
+                                                     'type': 'string'},
+                                              'key_data_objects': {'description': 'KDOs '
+                                                                                  'controlled '
+                                                                                  'or '
+                                                                                  'consumed '
+                                                                                  'by '
+                                                                                  'these '
+                                                                                  'components',
+                                                                   'items': {'type': 'string'},
+                                                                   'type': 'array'},
+                                              'quality_gates': {'description': 'Develop '
+                                                                               '& '
+                                                                               'Test: '
+                                                                               'gates '
+                                                                               'with '
+                                                                               'entry/exit '
+                                                                               'criteria',
+                                                                'items': {'properties': {'entry_criteria': {'type': 'string'},
+                                                                                         'exit_criteria': {'type': 'string'},
+                                                                                         'gate': {'type': 'string'}},
+                                                                          'required': ['gate'],
+                                                                          'type': 'object'},
+                                                                'type': 'array'},
+                                              'states': {'description': 'State '
+                                                                        'machine '
+                                                                        'for '
+                                                                        'lifecycle '
+                                                                        'KDOs '
+                                                                        '(e.g. '
+                                                                        'proposal '
+                                                                        'states)',
+                                                         'items': {'type': 'string'},
+                                                         'type': 'array'},
+                                              'system_of_record': {'additionalProperties': {'type': 'string'},
+                                                                   'description': 'KDO '
+                                                                                  '-> '
+                                                                                  'authoritative '
+                                                                                  'system '
+                                                                                  'map',
+                                                                   'type': 'object'}},
+                               'required': ['id',
+                                            'function',
+                                            'components',
+                                            'conformance_notes'],
+                               'title': 'IT4IT Functional Component',
+                               'type': 'object'},
  'strategy-canvas.json': {'$id': 'https://arckit.org/schemas/architecture/strategy-canvas.json',
                           '$schema': 'http://json-schema.org/draft-07/schema#',
                           'additionalProperties': False,
@@ -245,7 +374,128 @@ SCHEMAS: dict = {'compliance-evidence.json': {'$id': 'https://arckit.org/schemas
                                        'transformation_waves'],
                           'title': 'ArcKit OAA — Agile Strategy Canvas '
                                    '(strategy-canvas.yaml)',
-                          'type': 'object'}}
+                          'type': 'object'},
+ 'value-stream.json': {'$id': 'arckit-it4it/schemas/value-stream.json',
+                       '$schema': 'http://json-schema.org/draft-07/schema#',
+                       'description': 'One value stream of the IT4IT Value '
+                                      'Network (S261, Ch. 5). Reference-only '
+                                      '— S261 is a snapshot, not an approved '
+                                      'standard.',
+                       'properties': {'conformance_notes': {'description': 'Must '
+                                                                           'state '
+                                                                           'S261 '
+                                                                           'is '
+                                                                           'referenced '
+                                                                           'as '
+                                                                           'a '
+                                                                           'reference '
+                                                                           'architecture; '
+                                                                           'no '
+                                                                           'conformance '
+                                                                           'claim',
+                                                            'type': 'string'},
+                                      'cross_stream': {'description': 'Inbound/outbound '
+                                                                      'handoff '
+                                                                      'KDOs '
+                                                                      'and '
+                                                                      'their '
+                                                                      'contracts',
+                                                       'items': {'properties': {'contract': {'description': 'Cardinality '
+                                                                                                            '+ '
+                                                                                                            'system-of-record '
+                                                                                                            'obligation',
+                                                                                             'type': 'string'},
+                                                                                'direction': {'enum': ['inbound',
+                                                                                                       'outbound'],
+                                                                                              'type': 'string'},
+                                                                                'handoff_kdo': {'type': 'string'},
+                                                                                'stream': {'type': 'string'}},
+                                                                 'required': ['direction',
+                                                                              'stream',
+                                                                              'handoff_kdo'],
+                                                                 'type': 'object'},
+                                                       'type': 'array'},
+                                      'id': {'description': 'Document ID, '
+                                                            'e.g. '
+                                                            'ARC-002-ITVS-001-v1.0',
+                                             'type': 'string'},
+                                      'scenario': {'description': 'Scenario '
+                                                                  'from the '
+                                                                  'S261 '
+                                                                  'catalog '
+                                                                  'covered '
+                                                                  'by this '
+                                                                  'artefact',
+                                                   'type': 'string'},
+                                      'scenarios': {'description': 'S261 '
+                                                                   'catalog '
+                                                                   'scenarios '
+                                                                   'covered',
+                                                    'items': {'type': 'string'},
+                                                    'type': 'array'},
+                                      'stages': {'description': 'Ordered '
+                                                                'stage '
+                                                                'sequence '
+                                                                'for this '
+                                                                'stream',
+                                                 'items': {'properties': {'functional_components': {'items': {'type': 'string'},
+                                                                                                    'type': 'array'},
+                                                                          'kdo_in': {'items': {'type': 'string'},
+                                                                                     'type': 'array'},
+                                                                          'kdo_out': {'items': {'type': 'string'},
+                                                                                      'type': 'array'},
+                                                                          'name': {'type': 'string'}},
+                                                           'required': ['name'],
+                                                           'type': 'object'},
+                                                 'minItems': 1,
+                                                 'type': 'array'},
+                                      'stakeholder': {'properties': {'accountable_role': {'type': 'string'},
+                                                                     'contributing_roles': {'items': {'type': 'string'},
+                                                                                            'type': 'array'},
+                                                                     'primary': {'type': 'string'}},
+                                                      'required': ['primary'],
+                                                      'type': 'object'},
+                                      'stream': {'description': 'The S261 '
+                                                                'value '
+                                                                'stream this '
+                                                                'artefact '
+                                                                'covers',
+                                                 'enum': ['Evaluate',
+                                                          'Explore',
+                                                          'Integrate',
+                                                          'Deploy',
+                                                          'Publish',
+                                                          'Consume',
+                                                          'Operate'],
+                                                 'type': 'string'},
+                                      'system_of_record': {'additionalProperties': {'type': 'string'},
+                                                           'description': 'KDO '
+                                                                          '-> '
+                                                                          'authoritative '
+                                                                          'system '
+                                                                          'map',
+                                                           'type': 'object'},
+                                      'trigger': {'properties': {'condition': {'type': 'string'},
+                                                                 'frequency': {'type': 'string'},
+                                                                 'source_stream': {'description': 'Upstream '
+                                                                                                  'stream '
+                                                                                                  'that '
+                                                                                                  'triggers '
+                                                                                                  'this '
+                                                                                                  'one '
+                                                                                                  '(if '
+                                                                                                  'any)',
+                                                                                   'type': 'string'}},
+                                                  'required': ['condition'],
+                                                  'type': 'object'}},
+                       'required': ['id',
+                                    'stream',
+                                    'trigger',
+                                    'stakeholder',
+                                    'stages',
+                                    'conformance_notes'],
+                       'title': 'IT4IT Value Stream',
+                       'type': 'object'}}
 
 def load_schema(name: str):
     """Fetch a schema by filename; raise SchemaError if absent."""
@@ -254,10 +504,92 @@ def load_schema(name: str):
     raise SchemaError(f'schema {name!r} not found in SCHEMAS')
 
 FRAMEWORK_MODULES: dict = {
+    "agent": "agent",
+    "it4it": "it4it",
     "oaa": "oaa",
+    "togaf": "togaf",
 }
 
 FRAMEWORK_TOOLS: dict = {
+    "agent": [
+        {
+            'name': "agent_check_registry_coverage",
+            'description': "Validate that an agent-architecture evidence report covers the required registry codes. Checks that every mandatory code is cited, that all cited codes exist in the registry, and that no unknown ids are used. Returns valid, missing, unknown, and coverage_report.",
+            'arguments': {'additionalProperties': False,
+ 'properties': {'codes': {'description': 'List of agent-architecture code '
+                                         'ids (e.g. AGENT-DESIGN, '
+                                         'AGENT-SECURITY) that the evidence '
+                                         'report claims to cover.',
+                          'items': {'type': 'string'},
+                          'type': 'array'},
+                'mandatory': {'default': ['AGENT-DESIGN', 'AGENT-SECURITY'],
+                              'description': 'Subset of code ids that must '
+                                             'appear; defaults to design + '
+                                             'security, the two codes most '
+                                             'agent-architecture evidence '
+                                             'checks require.',
+                              'items': {'type': 'string'},
+                              'type': 'array'}},
+ 'required': ['codes'],
+ 'type': 'object'},
+            'schema': "",
+            'codes': ["AGT", "AGTT", "AGTS", "AGTR", "AGTL", "AGTP"],
+        },
+        {
+            'name': "agent_check_tool_allowlist",
+            'description': "Check an agent-architecture design for tool-allowlist hygiene: every agent must declare a tools allowlist (deny-first pattern) and every referenced tool must appear in the plugin registry. Returns valid, problems, agent_count, unknown_tools.",
+            'arguments': {'additionalProperties': False,
+ 'properties': {'agents': {'description': 'List of agent design objects; '
+                                          'each should carry name, tools '
+                                          '(allowlist), and optional '
+                                          'tools_deny.',
+                           'items': {'type': 'object'},
+                           'type': 'array'},
+                'registered_tools': {'description': 'Tool names registered '
+                                                    'in the plugin / MCP '
+                                                    'catalog.',
+                                     'items': {'type': 'string'},
+                                     'type': 'array'}},
+ 'required': ['agents', 'registered_tools'],
+ 'type': 'object'},
+            'schema': "",
+            'codes': ["AGT", "AGTT", "AGTS", "AGTR", "AGTL", "AGTP"],
+        },
+    ],
+    "it4it": [
+        {
+            'name': "it4it_check_value_stream",
+            'description': "Validate an IT4IT value-stream document: required structure, stage completeness against the IT4IT value-stream catalog, and traceability of each stage to at least one functional component. Returns a verdict with missing stages, untraced components, and stage-level details.",
+            'arguments': {'properties': {'stream': {'additionalProperties': True,
+                           'description': 'The parsed value-stream document '
+                                          "(YAML/JSON). Must include 'name' "
+                                          "and 'stages'.",
+                           'type': 'object'}},
+ 'required': ['stream'],
+ 'type': 'object'},
+            'schema': "value-stream.json",
+            'codes': ["REQ", "INT", "DR", "RISK", "DIAG", "WARD"],
+        },
+        {
+            'name': "it4it_check_component_trace",
+            'description': "Check an IT4IT functional-component document: every component has a stable ID, a value-stream (or 'shared') mapping, and no orphaned references to undefined stream IDs. Returns orphaned refs plus a per-stream component count.",
+            'arguments': {'properties': {'component': {'additionalProperties': True,
+                              'description': 'The parsed '
+                                             'functional-component document.',
+                              'type': 'object'},
+                'known_streams': {'description': 'IDs of value streams '
+                                                 'defined in the project, '
+                                                 'for orphan detection. '
+                                                 'Optional — if omitted, '
+                                                 'orphan checks are skipped.',
+                                  'items': {'type': 'string'},
+                                  'type': 'array'}},
+ 'required': ['component'],
+ 'type': 'object'},
+            'schema': "functional-component.json",
+            'codes': ["REQ", "INT", "DR", "RISK", "DIAG", "WARD"],
+        },
+    ],
     "oaa": [
         {
             'name': "oaa_check_compliance_evidence",
@@ -272,6 +604,7 @@ FRAMEWORK_TOOLS: dict = {
  'required': ['evidence'],
  'type': 'object'},
             'schema': "compliance-evidence.json",
+            'codes': ["REQ", "NFR", "RISK", "SOBC", "TRAC"],
         },
         {
             'name': "oaa_check_strategy_canvas",
@@ -283,6 +616,52 @@ FRAMEWORK_TOOLS: dict = {
  'required': ['canvas'],
  'type': 'object'},
             'schema': "strategy-canvas.json",
+            'codes': ["REQ", "NFR", "RISK", "SOBC", "TRAC"],
+        },
+    ],
+    "togaf": [
+        {
+            'name': "togaf_check_code_coverage",
+            'description': "Validate that an architecture evidence report covers the required TOGAF ADM codes. Checks that the report lists every mandatory code, that each cited code exists in the registry, and that no unknown code ids are used. Returns valid, missing, unknown, and coverage_report.",
+            'arguments': {'additionalProperties': False,
+ 'properties': {'codes': {'description': 'List of ADM code ids (e.g. '
+                                         'BIZ-CAP-MAP, GAP-ANALYSIS) that '
+                                         'the evidence report claims to '
+                                         'cover.',
+                          'items': {'type': 'string'},
+                          'type': 'array'},
+                'mandatory': {'default': ['BIZ-CAP-MAP', 'GAP-ANALYSIS'],
+                              'description': 'Subset of code ids that must '
+                                             'appear; defaults to the two '
+                                             'architecture-phase codes that '
+                                             'most TOGAF ADM evidence checks '
+                                             'require.',
+                              'items': {'type': 'string'},
+                              'type': 'array'}},
+ 'required': ['codes'],
+ 'type': 'object'},
+            'schema': "",
+            'codes': ["ADM0", "ADM1", "ADM2", "ADM3", "ADM4", "ADM5", "ADM6", "ADM7", "ADM8", "PREA", "ARC0", "ARC1"],
+        },
+        {
+            'name': "togaf_check_transition_plan",
+            'description': "Check a TOGAF transition-architecture plan for structural completeness: every work package must have an id, name, and capability it closes; every capability must trace to a gap-analysis code. Returns valid, problems, work_packages, gap_trace.",
+            'arguments': {'additionalProperties': False,
+ 'properties': {'capability_gaps': {'description': 'Capability gap ids that '
+                                                   'the plan claims to '
+                                                   'close.',
+                                    'items': {'type': 'string'},
+                                    'type': 'array'},
+                'work_packages': {'description': 'List of transition '
+                                                 'work-package objects; each '
+                                                 'must carry id, name, and '
+                                                 'closes (a capability id).',
+                                  'items': {'type': 'object'},
+                                  'type': 'array'}},
+ 'required': ['work_packages', 'capability_gaps'],
+ 'type': 'object'},
+            'schema': "",
+            'codes': ["ADM5", "ADM6", "TRANS", "ARC1"],
         },
     ],
 }
@@ -300,5 +679,5 @@ def call_tool(framework: str, name: str, arguments: dict):
     entry = module.TOOLS.get(name)
     if entry is None:
         raise KeyError(f'tool {name!r} not found in framework {framework!r}')
-    callable_, _description, _args_schema, _schema_file = entry
+    callable_, _description, _args_schema, _schema_file, _codes = entry
     return callable_(**arguments)
