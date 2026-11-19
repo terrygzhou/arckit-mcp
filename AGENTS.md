@@ -6,7 +6,7 @@
 
 ## Build, Test, and Development Commands
 
-- `python3 -m pytest tests/ -q` — baseline 69 passed (run from repo root; the README's `python -m pytest` assumes the shared venv at `~/.local/share/arckit-mcp/.venv`).
+- `python3 -m pytest tests/ -q` — baseline 87 passed (run from repo root; the README's `python -m pytest` assumes the shared venv at `~/.local/share/arckit-mcp/.venv`).
 - `arckit-mcp-sync` (or `arckit-mcp-sync --source-root ~/projects/arc-kit`) regenerates `_registry.py`, `gates.py`, `handoffs.py`; the console script comes from `pyproject.toml [project.scripts]` and needs the `arckit` package or `--source-root`.
 - Regenerate `intake.py`: `ARCKIT_MCP_ROOT=$PWD python3 ../arc-kit/scripts/generate-mcp-intake.py` (sibling arc-kit checkout).
 - Boot test: `arckit-mcp` or `python3 -m arckit_mcp` (stdio MCP server).
@@ -19,7 +19,7 @@ Never hand-edit `_registry.py`, `gates.py`, `handoffs.py`, or `intake.py` (each 
 
 ## Testing Guidelines
 
-Baseline invariants (`docs/agent-loop-checkpoints-remediation.md` §3): 69 passed; `test_relay_never_returns_empty_intake` and `test_no_write_path_for_answers` must stay green. `test_seed_and_persist_share_layout` pins the F1 fix (seed mints bare `projects/{pid}/` + `.meta` sidecar; slug is a separate payload field; duplicate names rejected — see `openspec/changes/fix-seed-context-layout`, all tasks checked). Keep tests in `tests/mcp/` near the affected area.
+Baseline invariants (`docs/agent-loop-checkpoints-remediation.md` §3): 87 passed; `test_relay_never_returns_empty_intake` and `test_no_write_path_for_answers` must stay green. `test_seed_and_persist_share_layout` pins the F1 fix (seed mints bare `projects/{pid}/` + `.meta` sidecar; slug is a separate payload field; duplicate names rejected — see `openspec/changes/fix-seed-context-layout`, all tasks checked). `test_skill_install.py` pins the installer's skill registration step (extracted to `scripts/install-skill.sh` — single source of truth shared by install.sh, install.ps1, and the test suite). Keep tests in `tests/mcp/` near the affected area.
 
 ## Commit & Pull Request Guidelines
 
