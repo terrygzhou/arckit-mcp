@@ -74,49 +74,61 @@ pip install ~/projects/arckit-mcp[dev]   # includes arckit + pytest
 
 ## New machine
 
-Three things: Python 3.11+, the repo, and (optionally) the arc-kit repo for
-regenerating the vendored generated files.
+One line. Requires Python ≥ 3.11 and `git` — nothing else.
 
-1. **Prereqs**: Python ≥ 3.11, `git`. Any venv tool works; the examples use
-   `uv` to match the dev loop.
+```bash
+# Mac / Linux
+curl -fsSL https://raw.githubusercontent.com/terrygzhou/arckit-mcp/main/install.sh | sh
 
-2. **Clone and install**:
+# Windows (PowerShell)
+irm https://raw.githubusercontent.com/terrygzhou/arckit-mcp/main/install.ps1 | iex
+```
 
-   ```bash
-   git clone <arckit-mcp-repo-url> arckit-mcp
-   git clone <arc-kit-repo-url> arc-kit        # only needed to regenerate generated files
+The installer clones the repo into `~/.local/share/arckit-mcp/repo`
+(Windows: `%LOCALAPPDATA%\arckit-mcp\repo`), creates a venv next to the
+checkout, and pip-installs the package. It is idempotent — re-run the same
+one-liner on the same machine to upgrade. The printed JSON is what you paste
+into your MCP client config:
 
-   uv venv ~/.local/share/arckit-mcp/.venv
-   source ~/.local/share/arckit-mcp/.venv/bin/activate
-   pip install -e ~/projects/arckit-mcp[dev]    # [dev] pulls arckit + pytest
-   ```
+```json
+{ "mcpServers": { "arckit": { "command": "~/.local/share/arckit-mcp/repo/.venv/bin/arckit-mcp" } } }
+```
 
-   The generated files (`_registry.py`, `gates.py`, `handoffs.py`,
-    `intake.py`) are committed, so a plain `pip install` works standalone —
-    no arc-kit required
-    to *run* the server. arc-kit is only needed to **regenerate** them when the
-    source commands change:
+The generated files (`_registry.py`, `gates.py`, `handoffs.py`,
+`intake.py`) are committed, so no arc-kit checkout is required to *run* the
+server. arc-kit is only needed to **regenerate** them when the source
+commands change (dev workflow):
 
-    ```bash
-    arckit-mcp-sync --source-root ~/projects/arc-kit
-    ARCKIT_MCP_ROOT=$PWD python ../arc-kit/scripts/generate-mcp-intake.py
-    ```
+```bash
+git clone <arc-kit-repo-url> arc-kit     # sibling of the arckit-mcp checkout
+arckit-mcp-sync --source-root ~/projects/arc-kit
+ARCKIT_MCP_ROOT=$PWD python ../arc-kit/scripts/generate-mcp-intake.py
+```
 
-3. **Register with your MCP client** (stdio server — `arckit-mcp` console
-   script or `python -m arckit_mcp`), e.g. Claude, mirroring `arc-kit/.mcp.json`:
+**Verify**:
 
-   ```json
-   { "mcpServers": { "arckit": { "command": "/path/to/venv/bin/arckit-mcp" } } }
-   ```
+```bash
+~/.local/share/arckit-mcp/repo/.venv/bin/arckit-mcp   # boots the stdio server; Ctrl-C to stop
+```
 
-   Substitute the path to the new machine's venv.
+**Security note**: the one-liner pipes a script from GitHub into your shell.
+If you want to inspect it first:
 
-4. **Verify**:
+```bash
+curl -fsSL https://raw.githubusercontent.com/terrygzhou/arckit-mcp/main/install.sh > install.sh
+shasum -a 256 install.sh        # check the hash against a trusted source
+sh install.sh
+```
 
-   ```bash
-   python -m pytest tests/ -v      # 66 tests
-   arckit-mcp                      # boots the stdio server; Ctrl-C to stop
-   ```
+The script only touches `~/.local/share/arckit-mcp/` (Windows:
+`%LOCALAPPDATA%\arckit-mcp`) — no system paths, no sudo.
+
+**Optional dev install** (arckit + pytest, for regenerating or running the
+test suite):
+
+```bash
+ARCKIT_MCP_DEV=1 curl -fsSL https://raw.githubusercontent.com/terrygzhou/arckit-mcp/main/install.sh | sh
+```
 
 ## Using with ArcKit
 
