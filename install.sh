@@ -14,7 +14,7 @@
 #   ARCKIT_MCP_REPO   git URL of the repo              (default: the public GitHub URL)
 #   ARCKIT_MCP_DEV=1  also install the [dev] extra     (arckit + pytest)
 
-set -euo pipefail
+set -eu
 
 REPO="${ARCKIT_MCP_REPO:-https://github.com/terrygzhou/arckit-mcp.git}"
 DEST="${ARCKIT_MCP_HOME:-$HOME/.local/share/arckit-mcp/repo}"
