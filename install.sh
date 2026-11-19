@@ -65,32 +65,20 @@ BIN="$DEST/.venv/bin/arckit-mcp"
 [ -x "$BIN" ] || fail "install finished but $BIN is missing"
 
 # --- 4. Register the agent skill (best effort) --------------------------------
-# Places the bundled skill where Claude Code / agent harnesses discover
-# skills (~/.claude/skills). Symlinks when the source lives on a stable
-# path so re-runs pick up upgrades; falls back to a copy if symlinking
-# fails (e.g. cross-filesystem). Non-fatal: the MCP server works without
-# the skill being registered.
-SKILL_DIR="$DEST/arckit_mcp/skill"
-SKILL_SRC="$SKILL_DIR"
-SKILL_NAME="arckit-mcp-agent-loop"
+# Delegates to scripts/install-skill.sh (single source of truth, shared with
+# the test suite and install.ps1's semantics). The script symlinks the skill
+# files so re-runs pick up in-place upgrades; falls back to a copy on
+# cross-filesystem or missing-symlink cases. Non-fatal: the MCP server
+# works without the skill being registered.
+SKILL_SRC="$DEST/arckit_mcp/skill"
 SKILL_DEST_DIR="${ARCKIT_SKILL_DIR:-$HOME/.claude/skills}"
-if [ -f "$SKILL_SRC/SKILL.md" ]; then
-  SKILL_TARGET="$SKILL_DEST_DIR/$SKILL_NAME"
-  mkdir -p "$SKILL_TARGET"
-  # Symlink the skill files so upgrades propagate; copy on failure.
-  for f in SKILL.md references; do
-    src="$SKILL_SRC/$f"
-    dst="$SKILL_TARGET/$f"
-    rm -rf "$dst"
-    if ln -s "$src" "$dst" 2>/dev/null; then
-      :
-    else
-      cp -R "$src" "$dst"
-    fi
-  done
-  echo "arckit-mcp: skill registered at $SKILL_TARGET (symlinked to $SKILL_SRC)"
+SKILL_NAME="arckit-mcp-agent-loop"
+# Use the script shipped with the fresh clone; fall back to a warning if it
+# is absent (very old checkouts).
+if [ -x "$DEST/scripts/install-skill.sh" ]; then
+  "$DEST/scripts/install-skill.sh" "$SKILL_SRC" "$SKILL_DEST_DIR" "$SKILL_NAME"
 else
-  echo "arckit-mcp: warning: skill not found at $SKILL_SRC — skipping skill registration"
+  echo "arckit-mcp: warning: scripts/install-skill.sh not found at $DEST — skipping skill registration"
 fi
 
 # --- 5. Done -----------------------------------------------------------------
