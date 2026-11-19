@@ -7,12 +7,14 @@
 #   2. Clone (or pull) the repo into $ARCKIT_MCP_HOME
 #      (default: %LOCALAPPDATA%\arckit-mcp\repo)
 #   3. Create a venv next to the checkout and pip install the package
-#   4. Print the MCP client registration JSON
+#   4. Register the bundled agent skill at ~/.claude/skills/arckit-mcp-agent-loop
+#   5. Print the MCP client registration JSON
 #
 # Environment overrides:
-#   $env:ARCKIT_MCP_REPO  git URL of the repo (default: the public GitHub URL)
-#   $env:ARCKIT_MCP_HOME  where the clone + venv live
-#   $env:ARCKIT_MCP_DEV   set to "1" to also install the [dev] extra (arckit + pytest)
+#   $env:ARCKIT_MCP_REPO   git URL of the repo (default: the public GitHub URL)
+#   $env:ARCKIT_MCP_HOME   where the clone + venv live
+#   $env:ARCKIT_MCP_DEV    set to "1" to also install the [dev] extra (arckit + pytest)
+#   $env:ARCKIT_SKILL_DIR where to register the skill (default: ~/.claude/skills)
 
 $ErrorActionPreference = "Stop"
 
@@ -72,7 +74,28 @@ if (-not (Test-Path $bin)) {
     Fail "install finished but $bin is missing"
 }
 
-# --- 4. Done -----------------------------------------------------------------
+# --- 4. Register the agent skill (best effort) --------------------------------
+# Copies the bundled skill where Claude Code / agent harnesses discover
+# skills (~/.claude/skills). Idempotent: re-running replaces the contents.
+# Non-fatal: the MCP server works without the skill being registered.
+$skillSrc = Join-Path $Dest "arckit_mcp\skill"
+$skillName = "arckit-mcp-agent-loop"
+$skillDestDir = if ($env:ARCKIT_SKILL_DIR) { $env:ARCKIT_SKILL_DIR } else {
+    (Join-Path $env:USERPROFILE ".claude\skills") }
+if (Test-Path (Join-Path $skillSrc "SKILL.md")) {
+    $skillTarget = Join-Path $skillDestDir $skillName
+    New-Item -ItemType Directory -Force -Path $skillTarget | Out-Null
+    Copy-Item -Path (Join-Path $skillSrc "SKILL.md") -Destination $skillTarget -Force
+    $refs = Join-Path $skillSrc "references"
+    if (Test-Path $refs) {
+        Copy-Item -Path $refs -Destination $skillTarget -Recurse -Force
+    }
+    Write-Host "arckit-mcp: skill registered at $skillTarget"
+} else {
+    Write-Host "arckit-mcp: warning: skill not found at $skillSrc - skipping skill registration"
+}
+
+# --- 5. Done -----------------------------------------------------------------
 Write-Host ""
 Write-Host "arckit-mcp installed"
 Write-Host ""

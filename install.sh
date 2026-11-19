@@ -7,12 +7,14 @@
 #   1. Preflight: Python >= 3.11 and git on PATH
 #   2. Clone (or pull) the repo into $ARCKIT_MCP_HOME (default: ~/.local/share/arckit-mcp/repo)
 #   3. Create a venv next to the checkout and pip install the package
-#   4. Print the MCP client registration JSON
+#   4. Register the bundled agent skill at ~/.claude/skills/arckit-mcp-agent-loop
+#   5. Print the MCP client registration JSON
 #
 # Environment overrides:
-#   ARCKIT_MCP_HOME   where the clone + venv live      (default: ~/.local/share/arckit-mcp/repo)
-#   ARCKIT_MCP_REPO   git URL of the repo              (default: the public GitHub URL)
-#   ARCKIT_MCP_DEV=1  also install the [dev] extra     (arckit + pytest)
+#   ARCKIT_MCP_HOME    where the clone + venv live      (default: ~/.local/share/arckit-mcp/repo)
+#   ARCKIT_MCP_REPO    git URL of the repo              (default: the public GitHub URL)
+#   ARCKIT_MCP_DEV=1   also install the [dev] extra     (arckit + pytest)
+#   ARCKIT_SKILL_DIR   where to register the skill      (default: ~/.claude/skills)
 
 set -eu
 
@@ -62,7 +64,36 @@ echo "arckit-mcp: installing (this can take a minute) ..."
 BIN="$DEST/.venv/bin/arckit-mcp"
 [ -x "$BIN" ] || fail "install finished but $BIN is missing"
 
-# --- 4. Done -----------------------------------------------------------------
+# --- 4. Register the agent skill (best effort) --------------------------------
+# Places the bundled skill where Claude Code / agent harnesses discover
+# skills (~/.claude/skills). Symlinks when the source lives on a stable
+# path so re-runs pick up upgrades; falls back to a copy if symlinking
+# fails (e.g. cross-filesystem). Non-fatal: the MCP server works without
+# the skill being registered.
+SKILL_DIR="$DEST/arckit_mcp/skill"
+SKILL_SRC="$SKILL_DIR"
+SKILL_NAME="arckit-mcp-agent-loop"
+SKILL_DEST_DIR="${ARCKIT_SKILL_DIR:-$HOME/.claude/skills}"
+if [ -f "$SKILL_SRC/SKILL.md" ]; then
+  SKILL_TARGET="$SKILL_DEST_DIR/$SKILL_NAME"
+  mkdir -p "$SKILL_TARGET"
+  # Symlink the skill files so upgrades propagate; copy on failure.
+  for f in SKILL.md references; do
+    src="$SKILL_SRC/$f"
+    dst="$SKILL_TARGET/$f"
+    rm -rf "$dst"
+    if ln -s "$src" "$dst" 2>/dev/null; then
+      :
+    else
+      cp -R "$src" "$dst"
+    fi
+  done
+  echo "arckit-mcp: skill registered at $SKILL_TARGET (symlinked to $SKILL_SRC)"
+else
+  echo "arckit-mcp: warning: skill not found at $SKILL_SRC — skipping skill registration"
+fi
+
+# --- 5. Done -----------------------------------------------------------------
 echo ""
 echo "✓ arckit-mcp installed"
 echo ""
