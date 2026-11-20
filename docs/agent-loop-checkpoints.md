@@ -52,6 +52,7 @@ answers render as `TBD`).
 | F3 | Contract | `server._command_doc_types` | Doc-type codes are derived from a hand-maintained `name_map`/`overlay_map` inside `server.py`, not read from the registry. A new command or code added to arc-kit's `doc-types.mjs` will not be reflected in the relay until `server.py` is updated by hand — a silent cross-repo drift risk (generated tables stay fresh, but the mapping does not). |
 | F4 | By-design | `intake.py` `COVERAGE` | 160 of 177 doc-types are `no-static-questions` (17 are `covered`); for the uncovered codes the relay degrades to a per-code placeholder question (intentional — the server must never return an empty question list). `COVERAGE` makes the gap visible. |
 | F5 | Contract | `server.persist_intake` | Read/seed only (never writes `.arckit/intake/`, per spec), but the on-disk stem is the hyphenated command name (`discovery-architecture.json` for the `discovery_architecture` tool), while the MCP tool parameter is the underscored name. Agents copying the tool parameter verbatim into a file path will miss saved answers. Pinned by `test_no_write_path_for_answers` (read-only shape) and by the hyphenated-path tests in `test_intake.py`. |
+| F6 | **Defect** | `server._register_command_tools` | Each per-command relay tool was defined with `def relay(...)` inside a `for command in sorted(...)` loop and closed over the loop's mutable `command` variable (late binding), so **every relay executed the last sorted command** (`transition-architecture`) regardless of which tool was invoked. **Fixed 2026-11-20** (`64d51bf`) — each iteration now builds its closure via a factory (`make_relay`) and registers it with `mcp.add_tool`; pinned by `tests/mcp/test_relay_binding.py` (behavior check + closure-cell tripwire, 2 tests). |
 
 ### 1.3 Known limitations
 
@@ -123,13 +124,29 @@ deferred to a separate OpenSpec change, cross-referenced here.
     arc-kit's derivation until the list is synced.  Same cross-repo
     drift risk as F3, narrower surface.
 
+- **F6 — Relay closures were late-binding across commands.**
+  `_register_command_tools` defined its `relay` function once per
+  iteration inside the sorted-command loop; Python closures bind loop
+  variables by reference, so all per-command relay tools shared one
+  cell and every relay payload carried the last command's data (with
+  the current registry sort order, `transition-architecture` — e.g.
+  `arckit.strategy` returned a TRANS payload and gate-blocked on
+  TRANS gates). Found during a live arckit-mcp agent-loop test
+  (auspost strategy loop) on 2026-11-20.
+  - **Status:** **fixed** in `64d51bf` — each iteration builds its
+    closure via a factory (`make_relay`) and registers it with
+    `mcp.add_tool`; every relay carries its own `command`. Pinned by
+    `tests/mcp/test_relay_binding.py` (`test_every_relay_tool_relays_its_own_command`,
+    `test_no_relay_shares_a_closure_cell`).
+
 ### 1.4 What the tests now cover
 
-`tests/mcp/test_agent_loop.py` (24 tests) drives a **payment gateway
+`tests/mcp/test_agent_loop.py` (26 tests) drives a **payment gateway
 modernization** sample project through the full relay loop and pins each
-checkpoint. Full suite: **66 passing** (42 pre-existing + 24 new) —
-`test_agent_loop` 24, `test_gates` 4, `test_intake` 22, `test_next_step` 5,
-`test_seed_context` 8, `test_sync` 3.
+checkpoint. Full suite: **94 passing** — `test_agent_loop` 26, `test_evidence` 9,
+`test_f3_fallback` 5, `test_gates` 4, `test_intake` 22, `test_next_step` 5,
+`test_relay_binding` 2, `test_seed_context` 9, `test_skill_install` 7,
+`test_sync` 5.
 
 ## 2. Checkpoint log (external agent drives the sample project)
 
