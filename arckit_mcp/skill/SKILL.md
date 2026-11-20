@@ -34,6 +34,9 @@ result), `gates` + `gate_blocked` (current gate status), `doc_type`
 (the doc-type code(s) the command writes), and `project_id` (echoed
 back — relay symmetry, F2).
 
+## Collaboration (strategy-class work)
+For strategy/transition work, **before generating the full artifact set**, surface the 2-4 high-leverage forks with the user in a single `clarify` batch (e.g. scope of the ask, cloud posture, build-vs-buy, depth of deliverable). Don't silently fill gaps with your own defaults — a relay drift is a tooling limitation, not a reason to skip user input. After the user confirms the forks, (re)generate the artifacts to match; if a fork later changes, retune the *whole set* for consistency and re-verify with a grep + gate check.
+
 ## The agent loop
 
 ### 1. Seed

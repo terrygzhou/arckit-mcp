@@ -505,7 +505,16 @@ def _command_doc_types(key: str) -> list[str]:
     }
     if name in overlay_map:
         return overlay_map[name]
-    return []
+    # F3 fallback (the behavior this docstring documents but the code
+    # previously did not implement): when the command name is not in the
+    # hand-maintained maps above, degrade to the gate codes the command
+    # reads — its non-OPTIONAL ``GATE_TIERS`` keys — rather than ``[]``.
+    # This stops the relay from silently emitting ``[]`` → a bare generic
+    # intake for a registry command whose name drifted out of the maps.
+    # ``GATE_TIERS`` is imported at module scope. Commands with no
+    # prerequisite gates (e.g. ``init``, ``analyze``) still yield ``[]``.
+    tiers = GATE_TIERS.get(key, {})
+    return sorted(code for code, tier in tiers.items() if tier != "OPTIONAL")
 
 
 def _instructions(command: str, project_id: str) -> str:
