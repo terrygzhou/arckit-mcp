@@ -743,14 +743,15 @@ def _register_command_tools() -> None:
         )
 
         tool_name = f"arckit.{name.replace('-', '_')}"
-        command = name
 
-        @mcp.tool(name=tool_name, description=desc)
-        def relay(project_id: str) -> dict:
-            """Relay the command's intake questions and gate status."""
-            return run_command(command, project_id)
+        def _make_relay(cmd: str):
+            def relay(project_id: str) -> dict:
+                """Relay the command's intake questions and gate status."""
+                return run_command(cmd, project_id)
+            relay.__name__ = tool_name.replace(".", "_")
+            return relay
 
-        relay.__name__ = tool_name.replace(".", "_")
+        mcp.add_tool(_make_relay(name), name=tool_name, description=desc)
 
 
 _register_meta_tools()
