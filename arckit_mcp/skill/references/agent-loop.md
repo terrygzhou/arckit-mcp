@@ -1,7 +1,9 @@
 # Agent loop — checkpoint map
 
-The agent loop is: **Seed → Relay → Advance → Re-check**, repeated
-until `next_step` returns `next: null`.
+The agent loop is: **Remind → Seed → Relay → Advance → Re-check**,
+repeated until `next_step` returns `next: null`. Stage 0 (Remind)
+reminds the user to provide a context folder before the seed launches
+the intake process.
 `docs/agent-loop-checkpoints.md` §2 walks the loop with a sample
 project (*Payment Gateway Modernization*) across nine checkpoints
 (CP1–CP9). This file maps each checkpoint to the loop step and the
@@ -9,7 +11,7 @@ tool call that drives it.
 
 | CP | Loop step | Tool call | What happens |
 | --- | --- | --- | --- |
-| CP1 | Seed (pre-check) | `arckit.seed_context` | Host asks for a context folder. The `seed_context` tool description mandates: "IF THE USER HAS NOT PROVIDED A CONTEXT FOLDER, ASK THEM FIRST." No folder ⇒ bare seed degrades cleanly (`files_imported=0`, `context_index=None`). |
+| CP1 | Remind (stage 0) | `arckit.seed_context` | The agent reminds the user to provide a folder of reference documents (RFPs, legacy specs, research) before launching the seed. No folder ⇒ bare seed degrades cleanly (`files_imported=0`, `context_index=None`). |
 | CP2 | Seed | `arckit.seed_context("…", goals=…, constraints=…)` | Mints `projects/001/` (bare layout + `.meta` sidecar, F1). `GOALS.md` written with `## Goals` / `## Constraints`. A second seed mints `002`. |
 | CP3 | Relay | `arckit.strategy(project_id="001")` | Returns `gate_blocked: true` — MANDATORY `PRIN` and `STKE` open. The relay **still** returns `intake` + `instructions` so the agent is ready once the gates close. OPTIONAL codes (e.g. `RISK` on strategy) are silently omitted from `gates`. |
 | CP4 | Relay (prereq) | `arckit.principles` → `arckit.persist_artifact("001","PRIN",…)` | `PRIN` gate open ⇒ step back to `principles`. PRIN has no static question block, so ≥1 placeholder question. Generate `ARC-001-PRIN-v1.0.md`, persist. `PRIN` gate on `strategy` flips to `closed`. |

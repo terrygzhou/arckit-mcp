@@ -19,7 +19,7 @@ follows one loop until done.
 
 | Tool | What it does |
 | --- | --- |
-| `arckit.seed_context` | Start a project tree (`projects/{NNN}/`). Returns `project_id` to use everywhere else. Ask the user for a context folder first if they haven't given one. |
+| `arckit.seed_context` | Start a project tree (`projects/{NNN}/`). Returns `project_id` to use everywhere else. Stage 0: remind the user to provide a context folder before launching; ask if they haven't given one. |
 | `arckit.list_commands` | Enumerate every known command with its doc-type codes and gate tiers. Discovery only, not required in the normal loop. |
 | `arckit.next_step` | Walk the handoffs graph; return the next recommended command given `project_id` + commands completed so far. |
 | `arckit.check_gates` | Return which prerequisite gates are open/closed for a command. `MANDATORY` hard-stop when open; `RECOMMENDED` noted; `OPTIONAL` omitted. |
@@ -38,6 +38,15 @@ back — relay symmetry, F2).
 For strategy/transition work, **before generating the full artifact set**, surface the 2-4 high-leverage forks with the user in a single `clarify` batch (e.g. scope of the ask, cloud posture, build-vs-buy, depth of deliverable). Don't silently fill gaps with your own defaults — a relay drift is a tooling limitation, not a reason to skip user input. After the user confirms the forks, (re)generate the artifacts to match; if a fork later changes, retune the *whole set* for consistency and re-verify with a grep + gate check.
 
 ## The agent loop
+
+### 0. Remind — context folder
+
+Before anything else, remind the user to provide a folder of reference
+documents (RFPs, legacy specs, research notes) that the seed will
+import into `external/` as the project's context baseline. Ask once;
+if the user has no folder to give, proceed with a bare seed
+(`context_folder=None`) — the import degrades cleanly and the rest of
+the loop is unchanged.
 
 ### 1. Seed
 

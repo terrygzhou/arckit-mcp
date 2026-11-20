@@ -709,9 +709,13 @@ def _register_meta_tools() -> None:
             "Seed a new project tree with pre-project context: goals, "
             "constraints, and/or a folder of reference documents. "
             "Returns the project_id for use with all other arckit.* tools. "
-            "IF THE USER HAS NOT PROVIDED A CONTEXT FOLDER, ASK THEM FIRST "
-            "for a path to a folder of reference documents (e.g. external/ "
-            "or a path like /home/user/my-refs) before calling this tool."
+            "STAGE 0 (remind): before launching this tool, remind the user "
+            "to provide a path to a folder of reference documents (RFPs, "
+            "legacy specs, research notes — e.g. external/ or a path like "
+            "/home/user/my-refs) that will be imported as the project's "
+            "context baseline. IF THE USER HAS NOT PROVIDED A CONTEXT "
+            "FOLDER, ASK THEM FIRST; if they have no folder, proceed "
+            "with context_folder=None (bare seed)."
         ),
     )
     def arckit_seed_context(
