@@ -228,3 +228,4 @@ this client-agent runbook.
 - [references/intake-discipline.md](references/intake-discipline.md) — one-question-at-a-time, sole-persister rule, `persist_intake` read-only, `.arckit/intake/` layout, placeholder degradation.
 - [references/artifact-naming.md](references/artifact-naming.md) — `ARC-{pid}-{CODE}[-NNN]-vN.N.md`, sequencing, `SUBDIR_MAP`, `.meta` sidecar.
 - [references/agent-loop.md](references/agent-loop.md) — CP1–CP9 mapping and worked example.
+- [references/ops-reinstall-restart.md](references/ops-reinstall-restart.md) — reinstall/update the `arckit-mcp` stdio server and restart its child (never the gateway); one-call transient, `pgrep` verify.
