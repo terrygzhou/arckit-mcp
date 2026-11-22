@@ -76,6 +76,65 @@ Call the per-command tool, e.g. `arckit.strategy(project_id: "001")`.
   `"STKE"`, …). Intake discipline in
   [references/intake-discipline.md](references/intake-discipline.md).
 
+### What each tool returns
+
+| Concern | Tool | Returns (exact keys) |
+| --- | --- | --- |
+| Seed project | `arckit.seed_context(project_name, goals?, constraints?, context_folder?)` | `{project_id, project_dir, slug, files_imported, context_index}`; on name collision `{"error": "Project 'X' already seeded", "project_id": null}`; on missing folder `{"error": "Context folder not found: …", "project_id": null}`. |
+| Discover commands | `arckit.list_commands()` | `[{command, tool, overlay, gates: [{code, tier}]}]` — one entry per command; OPTIONAL gates omitted. |
+| Run a command (relay) | `arckit.{command}(project_id)` | `{id, project_id, command, doc_type, intake: [{id, question, required, hint}], instructions: str, gates: [{code, tier, status}], gate_blocked: bool}`. `doc_type` is a single code (one doc-type) or a list (multi doc-type). `gates` carries MANDATORY + RECOMMENDED only; OPTIONAL omitted. `gate_blocked` is `true` iff any MANDATORY gate is open, including soft-structural inputs. |
+| Check gates | `arckit.check_gates(command, project_id)` | `{command, project_id, gates: [{code, tier, status}], gate_blocked: bool}`. |
+| Read saved answers | `arckit.persist_intake(project_id, command)` | `{project_id, command, found: bool, answers: object \| null, path: str}`; on a malformed file adds `"error": "Malformed intake file: …"`. **Read-only** — the server never writes answers. |
+| Write an artifact | `arckit.persist_artifact(project_id, type_code, content, sequence?)` | On success `{path: str, written: true}`. On unknown `type_code`: `{"error": "Unknown doc-type code '…'. …", "written": false}`. `path` is relative to the server cwd. Multi-instance codes (ADR, DIAG, …) auto-increment the `-NNN` sequence when `sequence` is omitted. |
+| Advance | `arckit.next_step(project_id, completed?)` | `{project_id, next: str \| null, reason: str}`. `next` is `null` when no handoff target qualifies. |
+
+**Interpretation rules for client agents:**
+
+- **Relay `gates` + `gate_blocked`** — `gate_blocked: true` means a hard-stop; read `gates` for the open MANDATORY codes and step back to the prerequisite command. The relay still returns `intake` + `instructions` so you're ready to proceed the moment the gate closes.
+- **Relay `intake`** — a list of questions to interview the user one at a time. Skipped questions render `TBD` in the artifact and never contribute to `gate_blocked`. The server never returns an empty `intake` list (placeholder floor, F4).
+- **Relay `instructions`** — a free-text prompt telling you to run the command in-session and save each artefact via `arckit.persist_artifact`. Treat it as a reminder, not a command to execute.
+- **`persist_intake` `found: false`** — no saved answers; run the interview live. `found: true` — prefill the interview with `answers`.
+- **`next_step` `next: null`** — the loop terminates; all reachable handoffs are complete. An empty `completed` list also returns `next: null` with the same reason.
+
+### Framework evidence tools
+
+Beyond the static tools above, the server registers a set of *dynamic*
+framework-evidence tools at startup (`server.py::_register_framework_tools`),
+one per tool in the generated `arckit_mcp/frameworks` package. Each is
+exposed under the name `arckit.{tool_name}` — e.g.
+`arckit.togaf_check_code_coverage`, `arckit.oaa_check_strategy_canvas`,
+`arckit.it4it_check_value_stream`, `arckit.agent_check_tool_allowlist`.
+These validate parsed architecture-evidence documents (TOGAF ADM
+coverage, OAA strategy canvas / compliance evidence, IT4IT value
+streams / component trace, agent registry coverage / tool allowlist).
+
+The tools are **schema-driven and generated** — the `frameworks/`
+package is produced by `arckit-mcp-sync` and is DO-NOT-EDIT. Do not
+pin line numbers here; the tool set grows when a new framework
+manifest lands. Common shape:
+
+- **Registry-coverage tools** (`*_check_code_coverage`,
+  `*_check_registry_coverage`): take a `codes` array (plus optional
+  `mandatory` override); return
+  `{valid, missing, unknown, coverage_report: {total_codes,
+  covered_codes, coverage_pct}}`.
+- **Structure-check tools** (`togaf_check_transition_plan`,
+  `oaa_check_strategy_canvas`, `oaa_check_compliance_evidence`,
+  `it4it_check_value_stream`, `it4it_check_component_trace`,
+  `agent_check_tool_allowlist`): take the parsed document
+  (YAML/JSON → dict); return a verdict object such as
+  `{valid, problems, ...}` or a gap list `{orphaned_refs, per-stream
+  counts}` depending on the tool. `oaa_check_compliance_evidence`
+  additionally returns schema violations (when `jsonschema` is
+  available) and a control-status rollup.
+- **Common error shape:** a tool whose input fails its JSON schema
+  raises `SchemaError` (the registered wrapper converts it to the
+  MCP-standard `{"error": "..."}` envelope).
+
+Each tool's description is self-documenting; the generated module's
+`TOOLS` dict in `arckit_mcp/frameworks/{framework}.py` carries the
+per-tool description, argument JSON-Schema, and framework codes.
+
 ### 3. Advance
 
 `arckit.next_step(project_id, completed: [...])` with command names
