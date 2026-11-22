@@ -127,9 +127,9 @@ def _resolve_command_content(command: str, source_root: Path | None) -> dict:
     * Tokens under the plugin's ``references/`` or ``templates/`` whose
       target file exists on disk are inlined into ``refs``, keyed by the
       placeholder-relative path WITHOUT a leading slash (e.g.
-      ``references/intake-instructions``). The on-disk file carries the
-      ``.md`` extension; the placeholder does not, so the lookup appends
-      it when the bare path is absent.
+      ``references/intake-instructions``). The placeholder may or may not
+      carry a ``.md`` extension; the lookup tries the literal path first,
+      then falls back to appending ``.md``.
     * Tokens whose first segment is ``scripts/`` or ``skills/`` are listed
       in ``unresolved`` as path-only strings (no inlined content).
     * Any other token whose target file does not exist is listed in
