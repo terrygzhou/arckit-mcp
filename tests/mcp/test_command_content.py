@@ -29,7 +29,7 @@ from pathlib import Path
 
 import pytest
 
-from arckit_mcp.server import _resolve_command_content
+from arckit_mcp.server import _resolve_command_content, run_command
 
 # The sibling arc-kit checkout used by the development environment.
 _ARC_KIT = Path("/home/terry/projects/arc-kit")
@@ -250,3 +250,92 @@ def test_resolve_command_content_unresolved_scripts_real_checkout():
     # refs are still inlined from the real checkout.
     assert "references/intake-instructions" in result["refs"]
     assert "templates/gov-reuse-template" in result["refs"]
+
+
+# ---------------------------------------------------------------------------
+# Task 3 relay-level tests: run_command carries command_content
+# ---------------------------------------------------------------------------
+
+
+def test_run_command_includes_command_content(
+    tmp_path, monkeypatch, arc_root
+):
+    """Task 4.1: run_command carries command_content when source root available."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        "arckit_mcp.server.resolve_source_root", lambda: arc_root
+    )
+    relay = run_command("my_cmd", "001")
+    cc = relay["command_content"]
+    assert cc["available"] is True
+    assert cc["source"] == "plugins/arckit-claude/commands/my-cmd.md"
+    assert len(cc["content"]) > 0
+    # refs are inlined (Task 2.2): good-ref + my-template present.
+    assert "references/good-ref" in cc["refs"]
+    assert "templates/my-template" in cc["refs"]
+    # scripts token is in unresolved (Task 2.3), not in refs.
+    assert "scripts/validate-handoff" in cc["unresolved"]
+    assert "scripts/validate-handoff" not in cc["refs"]
+    # missing reference is flagged (Task 2.3).
+    assert any(
+        isinstance(m, dict) and m.get("path") == "references/nope"
+        for m in cc["unresolved"]
+    )
+
+
+def test_run_command_command_content_unavailable(
+    tmp_path, monkeypatch
+):
+    """Task 4.3: command_content is available=false when no source root."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        "arckit_mcp.server.resolve_source_root", lambda: None
+    )
+    relay = run_command("requirements", "001")
+    cc = relay["command_content"]
+    assert cc["available"] is False
+    assert "ARCKIT_SOURCE_ROOT" in cc["reason"]
+    assert "arckit package" in cc["reason"]
+
+
+def test_run_command_existing_keys_unchanged(tmp_path, monkeypatch, arc_root):
+    """Task 4.4: backward compat — all existing keys present and unchanged."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        "arckit_mcp.server.resolve_source_root", lambda: arc_root
+    )
+    relay = run_command("my_cmd", "001")
+    for key in (
+        "id",
+        "project_id",
+        "command",
+        "doc_type",
+        "intake",
+        "instructions",
+        "gates",
+        "gate_blocked",
+    ):
+        assert key in relay, f"existing key '{key}' missing from relay payload"
+    assert relay["id"] == "ARC-001"
+    assert relay["project_id"] == "001"
+    assert relay["command"] == "my-cmd"
+    assert isinstance(relay["intake"], list)
+    assert isinstance(relay["gates"], list)
+
+
+def test_instructions_points_at_command_content(tmp_path, monkeypatch):
+    """Task 3.2 / D6: instructions one-liner reframed to point at command_content.content."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        "arckit_mcp.server.resolve_source_root", lambda: None
+    )
+    relay = run_command("requirements", "001")
+    instructions = relay["instructions"]
+    # Must point at command_content.content as the authoritative instruction.
+    assert "command_content.content" in instructions
+    # Must still name the doc-type code.
+    assert "REQ" in instructions
+    # Must still name arckit.persist_artifact.
+    assert "arckit.persist_artifact" in instructions
+    # Must still name the project id.
+    assert "001" in instructions

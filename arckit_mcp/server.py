@@ -32,6 +32,7 @@ from arckit_mcp._registry import (
 from arckit_mcp.gates import GATE_TIERS
 from arckit_mcp.handoffs import HANDOFFS
 from arckit_mcp.intake import COVERAGE, INTAKE
+from arckit_mcp.source_root import resolve_source_root
 
 mcp = FastMCP("arckit")
 
@@ -626,7 +627,7 @@ def _instructions(command: str, project_id: str) -> str:
     key = _command_key(command)
     codes = _command_doc_types(key) or ["<TYPE>"]
     return (
-        f"Run the {command} command in your session to produce "
+        f"Execute the full command in command_content.content to produce "
         f"{'/'.join(codes)} artefact(s) for project {project_id}. "
         f"Save each artefact to projects/{project_id}/ via "
         f"arckit.persist_artifact."
@@ -639,6 +640,7 @@ def run_command(command: str, project_id: str) -> dict:
     name = key.split("/", 1)[1]
     codes = _command_doc_types(key)
     gate_report = check_gates(name, project_id)
+    command_content = _resolve_command_content(name, resolve_source_root())
     return {
         "id": f"ARC-{project_id}",
         "project_id": project_id,
@@ -648,6 +650,7 @@ def run_command(command: str, project_id: str) -> dict:
         "instructions": _instructions(name, project_id),
         "gates": gate_report["gates"],
         "gate_blocked": gate_report["gate_blocked"],
+        "command_content": command_content,
     }
 
 
