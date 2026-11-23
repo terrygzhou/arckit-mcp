@@ -19,4 +19,17 @@ The module ships four layers:
 
 __version__ = "0.1.0"
 
-__all__ = ["__version__"]
+__all__ = ["__version__", "resolve_source_root"]
+
+
+def __getattr__(name: str):
+    """Lazy re-export of :func:`arckit_mcp.source_root.resolve_source_root`.
+
+    Deferred (PEP 562) so that importing ``arckit_mcp`` never re-enters
+    the package's own ``__init__`` while it is still being initialised.
+    """
+    if name == "resolve_source_root":
+        from arckit_mcp.source_root import resolve_source_root
+
+        return resolve_source_root
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

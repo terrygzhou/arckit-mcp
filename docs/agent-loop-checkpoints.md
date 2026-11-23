@@ -29,10 +29,14 @@ governance harness as MCP tools. Layers:
   - **Per-command tools**: 101 `arckit.{command}` relays, one per key in the
     generated `GATE_TIERS` table (core + overlay plugins). Each returns
     `intake` (questions to answer), `instructions` (where to run + where to
-    save), `gates` + `gate_blocked`, `doc_type`.
-  - **Prompt-relay model**: the agent never reads the command markdown; the
-    server tells it which gates are open, what to answer, where to write; the
-    agent does the LLM generation in-session and persists via
+    save), `gates` + `gate_blocked`, `doc_type`, and `command_content`
+    (the full command markdown + inlined references, when a source root
+    is available).
+  - **Prompt-relay model**: the agent receives the command's procedural
+    content via `command_content.content` (full instruction surface,
+    equivalent to the slash path); when no source root is available the
+    relay degrades gracefully to the `instructions` one-liner. The agent
+    does the LLM generation in-session and persists via
     `arckit.persist_artifact`.
 
 **`arc-kit`** — the source harness. `plugins/arckit-claude/commands/*.md`
@@ -252,13 +256,14 @@ PCI-DSS L1, `< 2 s` latency. Constraints: no new vendors, GovCloud.
 
 ```bash
 cd ~/projects/arckit-mcp
-python -m pytest tests/ -q          # 66 passed
-python -m pytest tests/mcp/test_agent_loop.py -v   # the new 24
+python3 -m pytest tests/ -q          # 118 passed
+python3 -m pytest tests/mcp/test_agent_loop.py -v   # the new 24
+python3 -m pytest tests/mcp/test_command_content.py -v  # command_content tests
 ```
 
 ## 4. Verification record
 
-- **Command:** `python -m pytest tests/ -q` (run from repo root)
-- **Outcome:** `66 passed in 0.21s` (42 pre-existing + 24 new).
+- **Command:** `python3 -m pytest tests/ -q` (run from repo root)
+- **Outcome:** `118 passed in 0.33s`.
 - No regressions; the new suite is isolated under `tmp_path` +
   `monkeypatch.chdir`, so it does not touch the real `projects/` tree.

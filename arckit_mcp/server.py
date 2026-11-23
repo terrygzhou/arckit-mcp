@@ -32,6 +32,7 @@ from arckit_mcp._registry import (
 from arckit_mcp.gates import GATE_TIERS
 from arckit_mcp.handoffs import HANDOFFS
 from arckit_mcp.intake import COVERAGE, INTAKE
+from arckit_mcp.source_root import resolve_source_root
 
 mcp = FastMCP("arckit")
 
@@ -100,6 +101,111 @@ def _command_key(name: str) -> str:
     # Fall back: build a default key so unknown commands still work with
     # empty gates/handoffs.
     return f"arckit-claude/{name.replace('_', '-')}"
+
+
+# Design D3 (full-command-relay): placeholder tokens in command bodies that
+# point at plugin-internal files, e.g. ``${CLAUDE_PLUGIN_ROOT}/references/x``.
+_CLAUDE_PLUGIN_ROOT_RE = re.compile(
+    r"\$\{CLAUDE_PLUGIN_ROOT\}/([a-zA-Z0-9_/-]+)"
+)
+
+# First path segment (``scripts/``, ``skills/`` …) for which tokens are
+# NEVER inlined — they are listed in ``unresolved`` as path-only strings
+# (Task 2.3). Tokens under ``references/`` or ``templates/`` that exist on
+# disk are inlined into ``refs`` instead.
+_NO_INLINE_PREFIXES = ("scripts/", "skills/")
+
+
+def _resolve_command_content(command: str, source_root: Path | None) -> dict:
+    """Resolve the full command document + inline refs (Task 2.1–2.4).
+
+    Maps the command name (via ``_command_key``, same convention as
+    ``run_command``) to the command file
+    ``source_root/plugins/{plugin}/commands/{name}.md``, reads
+    the full text, and scans it for ``${CLAUDE_PLUGIN_ROOT}/<token>``
+    placeholders (Design D3):
+
+    * Tokens under the plugin's ``references/`` or ``templates/`` whose
+      target file exists on disk are inlined into ``refs``, keyed by the
+      placeholder-relative path WITHOUT a leading slash (e.g.
+      ``references/intake-instructions``). The placeholder may or may not
+      carry a ``.md`` extension; the lookup tries the literal path first,
+      then falls back to appending ``.md``.
+    * Tokens whose first segment is ``scripts/`` or ``skills/`` are listed
+      in ``unresolved`` as path-only strings (no inlined content).
+    * Any other token whose target file does not exist is listed in
+      ``unresolved`` as ``{"path": <relpath>, "missing": True}``.
+
+    When ``source_root is None`` (Task 2.4) the function returns
+    ``{"available": False, "reason": ...}`` without raising.
+
+    KNOWN LIMITATION (by-design, per Task 2.2/2.3): tokens whose first
+    segment is neither ``references/`` nor ``templates/`` (e.g.
+    ``schemas/…``) are NOT inlined even when the target exists on disk —
+    they surface via the "target does not exist" branch only when the
+    file is absent. The relay intentionally inlines just references and
+    templates per the spec.
+    """
+    if source_root is None:
+        return {
+            "available": False,
+            "reason": (
+                "No arc-kit source root available. Set ARCKIT_SOURCE_ROOT "
+                "or install the arckit package."
+            ),
+        }
+
+    key = _command_key(command)
+    plugin, name = key.split("/", 1)
+    cmd_file = source_root / "plugins" / plugin / "commands" / f"{name}.md"
+    if not cmd_file.is_file():
+        # Unknown command (or plugin without a source tree): degrade to the
+        # no-content shape so callers can branch on ``available`` uniformly.
+        return {
+            "available": False,
+            "reason": (
+                f"Command file not found: {cmd_file}"
+            ),
+        }
+
+    text = cmd_file.read_text(encoding="utf-8")
+    plugin_dir = source_root / "plugins" / plugin
+
+    refs: dict[str, str] = {}
+    unresolved: list = []
+    seen: set[str] = set()
+    for token in _CLAUDE_PLUGIN_ROOT_RE.findall(text):
+        if token in seen:
+            continue
+        seen.add(token)
+
+        target = plugin_dir / token
+        # Placeholders are extensionless; the on-disk file typically
+        # carries ``.md``. Prefer the literal path, fall back to ``.md``.
+        if target.suffix:
+            candidates = [target]
+        else:
+            candidates = [target, Path(str(target) + ".md")]
+        existing = next((c for c in candidates if c.is_file()), None)
+
+        first_segment = token.split("/", 1)[0]
+        if first_segment in ("scripts", "skills"):
+            unresolved.append(token)
+        elif existing is not None:
+            refs[token] = existing.read_text(encoding="utf-8")
+        elif first_segment in ("references", "templates"):
+            unresolved.append({"path": token, "missing": True})
+        # else: non-references/templates token whose target exists (e.g.
+        # schemas/) or whose target is ambiguous — not inlined and not
+        # reported missing (KNOWN LIMITATION above).
+
+    return {
+        "available": True,
+        "source": cmd_file.relative_to(source_root).as_posix(),
+        "content": text,
+        "refs": refs,
+        "unresolved": unresolved,
+    }
 
 
 def _intake_mandatory_gates(command: str, project_id: str) -> list[dict]:
@@ -521,7 +627,7 @@ def _instructions(command: str, project_id: str) -> str:
     key = _command_key(command)
     codes = _command_doc_types(key) or ["<TYPE>"]
     return (
-        f"Run the {command} command in your session to produce "
+        f"Execute the full command in command_content.content to produce "
         f"{'/'.join(codes)} artefact(s) for project {project_id}. "
         f"Save each artefact to projects/{project_id}/ via "
         f"arckit.persist_artifact."
@@ -534,6 +640,7 @@ def run_command(command: str, project_id: str) -> dict:
     name = key.split("/", 1)[1]
     codes = _command_doc_types(key)
     gate_report = check_gates(name, project_id)
+    command_content = _resolve_command_content(name, resolve_source_root())
     return {
         "id": f"ARC-{project_id}",
         "project_id": project_id,
@@ -543,6 +650,7 @@ def run_command(command: str, project_id: str) -> dict:
         "instructions": _instructions(name, project_id),
         "gates": gate_report["gates"],
         "gate_blocked": gate_report["gate_blocked"],
+        "command_content": command_content,
     }
 
 

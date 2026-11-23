@@ -73,6 +73,12 @@ output paths. The intake generator (`generate-mcp-intake.py`) is run
 directly: `python ../arc-kit/scripts/generate-mcp-intake.py` (sibling
 checkout, with `ARCKIT_MCP_ROOT` set or a CLI arg for non-sibling layouts).
 
+The full mapping of how this repo depends on the
+[terrygzhou/arc-kit](https://github.com/terrygzhou/arc-kit) upstream project
+— generated files, optional dev packaging, dev workflow, runtime isolation,
+and drift risks — is documented in
+[docs/arc-kit-relationship.md](docs/arc-kit-relationship.md).
+
 ## Installation
 
 ```bash
